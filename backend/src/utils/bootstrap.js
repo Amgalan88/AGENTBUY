@@ -17,19 +17,21 @@ async function ensureBaseCargo() {
 }
 
 async function ensureAdmin() {
-  const phone = "AMGALANBAI";
+  const phone = "Amgalanbai";
   const exists = await User.findOne({ phone });
   if (exists) return;
-  const passwordHash = await bcrypt.hash("AMGALAN88", 10);
+  const passwordHash = await bcrypt.hash("Amgalan0708", 10);
   await User.create({
     phone,
     fullName: "Амгалан Админ",
     passwordHash,
     roles: [ROLES.ADMIN, ROLES.SUPER_ADMIN],
+    secretQuestion: "Ээжийнхээ нэр юу вэ?",
+    secretAnswerHash: await bcrypt.hash("admin", 10),
     cardBalance: 0,
     cardProgress: 0,
   });
-  console.log("Seeded default admin user AMGALANBAI / AMGALAN88");
+  console.log("Seeded default admin user");
 }
 
 module.exports = { ensureBaseCargo, ensureAdmin };
