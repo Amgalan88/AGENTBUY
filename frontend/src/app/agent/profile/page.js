@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useUI } from "../layout";
+import { useUI } from "@/app/layout";
 import { api } from "@/lib/api";
 import Button from "@/components/ui/Button";
 
