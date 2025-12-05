@@ -33,6 +33,7 @@ const ALLOWED_ORIGINS = (process.env.CLIENT_URL ||
   .filter(Boolean);
 
 app.use(express.json({ limit: "1mb" }));
+app.set("trust proxy", 1); // Render proxy-г итгэх
 app.use(cookieParser());
 app.use(
   cors({
