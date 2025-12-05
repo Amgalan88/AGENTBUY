@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
-import { useUI } from "../../layout";
+import { useUI } from "@/app/layout";
 import { api } from "@/lib/api";
 import Button from "@/components/ui/Button";
 import ImageLightbox from "@/components/ImageLightbox";
@@ -17,7 +17,7 @@ const emptyItem = () => ({
   images: [],
 });
 
-export default function BatchOrderPage() {
+function BatchOrderForm() {
   const { theme, view } = useUI();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -429,5 +429,13 @@ export default function BatchOrderPage() {
       </main>
       <ImageLightbox src={previewImage} alt="Багцын зураг" onClose={() => setPreviewImage("")} />
     </>
+  );
+}
+
+export default function BatchOrderPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Ачааллаж байна...</div>}>
+      <BatchOrderForm />
+    </Suspense>
   );
 }

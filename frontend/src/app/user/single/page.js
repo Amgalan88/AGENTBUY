@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useUI } from "@/app/layout";
@@ -16,7 +16,7 @@ const appOptionsData = [
   { value: "dewu", label: "Dewu (Poizon)" },
 ];
 
-export default function SingleOrderPage() {
+function SingleOrderForm() {
   const { theme, view } = useUI();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -373,5 +373,13 @@ export default function SingleOrderPage() {
       </main>
       <ImageLightbox src={previewImage} alt="Захиалгын зураг" onClose={() => setPreviewImage("")} />
     </>
+  );
+}
+
+export default function SingleOrderPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Ачааллаж байна...</div>}>
+      <SingleOrderForm />
+    </Suspense>
   );
 }
