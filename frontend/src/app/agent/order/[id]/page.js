@@ -5,6 +5,8 @@
 import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useUI } from "@/app/layout";
+import { getSocket } from "@/lib/socket";
+import Button from "@/components/ui/Button";
 
 const appLabel = {
     any: "Ямар ч платформ",
@@ -44,6 +46,8 @@ export default function AgentOrderDetailPage({ params }) {
         payLink: "",
         image: "",
     });
+    const [newComment, setNewComment] = useState("");
+    const [commentLoading, setCommentLoading] = useState(false);
 
     const mainClass =
         theme === "night"
@@ -82,8 +86,14 @@ export default function AgentOrderDetailPage({ params }) {
             }
         }
         loadRequest();
+        const socket = getSocket();
+        const handleComment = (data) => {
+            if (data?.orderId === id) loadRequest();
+        };
+        socket.on("order:comment", handleComment);
         return () => {
             alive = false;
+            socket.off("order:comment", handleComment);
         };
     }, [id]);
 
@@ -150,6 +160,29 @@ export default function AgentOrderDetailPage({ params }) {
     };
 
     const handleChange = (field) => (e) => setForm({ ...form, [field]: e.target.value });
+
+    const handleCommentSubmit = async (e) => {
+        e.preventDefault();
+        if (!newComment.trim()) return;
+        setCommentLoading(true);
+        setError("");
+        try {
+            const res = await fetch(`http://localhost:5000/api/agent/orders/${id}/comment`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ message: newComment }),
+            });
+            if (!res.ok) throw new Error(`Comment failed ${res.status}`);
+            const data = await res.json();
+            setRequest(data);
+            setNewComment("");
+        } catch (err) {
+            console.error(err);
+            setError("Сэтгэгдэл илгээхэд алдаа гарлаа.");
+        } finally {
+            setCommentLoading(false);
+        }
+    };
 
     if (loading) {
         return (
@@ -254,16 +287,15 @@ export default function AgentOrderDetailPage({ params }) {
                         <div className="space-y-3">
                             <div className="rounded-xl border border-slate-200 p-3 text-sm space-y-2">
                                 <h3 className="font-semibold text-sm">Үйлдэл</h3>
-                                <button
+                                <Button
                                     onClick={handleClaim}
                                     disabled={request.status !== "new" || claiming}
-                                    className={`w-full rounded-lg px-4 py-2 text-xs font-medium text-white transition ${request.status !== "new"
-                                        ? "bg-slate-400 cursor-not-allowed"
-                                        : "bg-emerald-600 hover:bg-emerald-500"
-                                        }`}
+                                    variant={request.status !== "new" ? "muted" : "primary"}
+                                    size="sm"
+                                    fullWidth
                                 >
                                     {claiming ? "Авч байна..." : request.status !== "new" ? "Бусад авч байна" : "Захиалга авах"}
-                                </button>
+                                </Button>
                                 <Link
                                     href={`/requests/${request._id}`}
                                     className="block rounded-lg border border-slate-200 px-4 py-2 text-center text-xs text-slate-700 hover:border-emerald-400"
@@ -272,12 +304,58 @@ export default function AgentOrderDetailPage({ params }) {
                                 </Link>
                             </div>
 
-                            <div className="rounded-xl border border-slate-200 p-3 text-sm space-y-2">
-                                <h3 className="font-semibold text-sm">Чат (user/agent/admin)</h3>
-                                <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-2 text-[11px] text-slate-600">
-                                    Реал чат API байхгүй тул эндээс дэлгэрэнгүй илгээсэн гэж үзнэ. Backend socket
-                                    интеграц хийхэд энэ хэсгийг холбоно.
+                            <div className="rounded-xl border border-slate-200 p-3 text-sm space-y-3">
+                                <h3 className="font-semibold text-sm">💬 Хэрэглэгчтэй чат</h3>
+                                
+                                {/* Comment List */}
+                                <div className="space-y-2 max-h-48 overflow-y-auto">
+                                    {(request.comments || []).length === 0 ? (
+                                        <p className="text-xs text-slate-500">Сэтгэгдэл байхгүй байна.</p>
+                                    ) : (
+                                        (request.comments || []).map((c, idx) => (
+                                            <div
+                                                key={idx}
+                                                className={`rounded-lg p-2 text-xs ${
+                                                    c.senderRole === "user"
+                                                        ? "bg-blue-50 border border-blue-100 mr-4"
+                                                        : "bg-emerald-50 border border-emerald-100 ml-4"
+                                                }`}
+                                            >
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className={`font-medium ${
+                                                        c.senderRole === "user" ? "text-blue-600" : "text-emerald-600"
+                                                    }`}>
+                                                        {c.senderRole === "user" ? "👤 Хэрэглэгч" : "💼 Та"}
+                                                    </span>
+                                                    <span className="text-slate-400">
+                                                        {new Date(c.createdAt).toLocaleString()}
+                                                    </span>
+                                                </div>
+                                                <p className="text-slate-700">{c.message}</p>
+                                            </div>
+                                        ))
+                                    )}
                                 </div>
+
+                                {/* Comment Form */}
+                                <form onSubmit={handleCommentSubmit} className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        value={newComment}
+                                        onChange={(e) => setNewComment(e.target.value)}
+                                        placeholder="Хариулт бичих..."
+                                        className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                        disabled={commentLoading}
+                                    />
+                                    <Button
+                                        type="submit"
+                                        size="sm"
+                                        variant="secondary"
+                                        disabled={!newComment.trim() || commentLoading}
+                                    >
+                                        {commentLoading ? "..." : "Илгээх"}
+                                    </Button>
+                                </form>
                             </div>
                         </div>
                     </div>
@@ -340,13 +418,9 @@ export default function AgentOrderDetailPage({ params }) {
                                 <p className="text-[11px] text-slate-600">
                                     Тайлан илгээснээр статус "Тайлан ирсэн" болно. Хэрэглэгч үзээд оноо өгч, төлбөрөө хийсний дараа биелсэн төлөвт орно.
                                 </p>
-                                <button
-                                    type="submit"
-                                    disabled={saving}
-                                    className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-medium text-white hover:bg-slate-800 transition"
-                                >
+                                <Button type="submit" disabled={saving} variant="secondary" size="sm" className="px-4 py-2">
                                     {saving ? "Илгээж байна..." : "Тайлан илгээх"}
-                                </button>
+                                </Button>
                             </div>
                         </form>
                     </div>

@@ -2,43 +2,24 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useUI } from "../layout";
+import Button from "@/components/ui/Button";
 import { api } from "@/lib/api";
 import { getSocket } from "@/lib/socket";
 
-const APP_ICONS = {
-  taobao: "/marketplace/taobao.png",
-  pinduoduo: "/marketplace/pinduoudo.png",
-  "1688": "/marketplace/1688.jpg",
-  dewu: "/marketplace/poizon.png",
-  any: "/marketplace/taobao.png",
-};
-
-const STATUS_LABEL = {
-  PUBLISHED: "Нээлттэй",
-  AGENT_LOCKED: "Түгжсэн",
-  AGENT_RESEARCHING: "Судалгаанд",
-  REPORT_SUBMITTED: "Тайлан ирсэн",
-  WAITING_USER_REVIEW: "Хэрэглэгч шийдвэрлэж байна",
-  WAITING_PAYMENT: "Төлбөр хүлээж",
-  COMPLETED: "Дууссан",
-};
-
-const STATUS_TONE = {
-  PUBLISHED: "bg-slate-600",
-  AGENT_LOCKED: "bg-amber-600",
-  AGENT_RESEARCHING: "bg-indigo-600",
-  REPORT_SUBMITTED: "bg-sky-600",
-  WAITING_USER_REVIEW: "bg-sky-600",
-  WAITING_PAYMENT: "bg-amber-600",
-  COMPLETED: "bg-emerald-600",
+const STATUS_CONFIG = {
+  PUBLISHED: { label: "Нээлттэй", color: "chip-info" },
+  AGENT_LOCKED: { label: "Түгжсэн", color: "chip-warning" },
+  AGENT_RESEARCHING: { label: "Судалгаанд", color: "chip-info" },
+  REPORT_SUBMITTED: { label: "Тайлан", color: "chip-success" },
+  WAITING_USER_REVIEW: { label: "Шийдвэрлэж байна", color: "chip-warning" },
+  WAITING_PAYMENT: { label: "Төлбөр", color: "chip-warning" },
+  COMPLETED: { label: "Дууссан", color: "chip-success" },
 };
 
 const formatDate = (value) =>
   value
     ? new Intl.DateTimeFormat("mn", {
-        year: "numeric",
-        month: "2-digit",
+        month: "short",
         day: "2-digit",
         hour: "2-digit",
         minute: "2-digit",
@@ -46,26 +27,11 @@ const formatDate = (value) =>
     : "-";
 
 export default function AgentPage() {
-  const { theme, view } = useUI();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [actionId, setActionId] = useState("");
   const [refreshing, setRefreshing] = useState(false);
-
-  const mainClass =
-    theme === "night"
-      ? "bg-slate-950 text-slate-50"
-      : theme === "mid"
-        ? "bg-slate-200 text-slate-900"
-        : "bg-slate-100 text-slate-900";
-
-  const widthClass =
-    view === "mobile"
-      ? "max-w-md"
-      : view === "tablet"
-        ? "max-w-3xl"
-        : "max-w-6xl";
 
   useEffect(() => {
     let alive = true;
@@ -77,7 +43,7 @@ export default function AgentPage() {
         setOrders(data);
       } catch (err) {
         if (!alive) return;
-        setError(err.message || "Нээлттэй захиалга татахад алдаа гарлаа");
+        setError(err.message || "Захиалга татахад алдаа");
       } finally {
         if (alive) setLoading(false);
       }
@@ -100,7 +66,7 @@ export default function AgentPage() {
       const data = await api("/api/agent/orders/available");
       setOrders(data);
     } catch (err) {
-      setError(err.message || "Нээлттэй захиалга татахад алдаа гарлаа");
+      setError(err.message || "Татахад алдаа");
     } finally {
       setRefreshing(false);
     }
@@ -114,7 +80,7 @@ export default function AgentPage() {
       const data = await api("/api/agent/orders/available");
       setOrders(data);
     } catch (err) {
-      setError(err.message || "Түгжихэд алдаа гарлаа");
+      setError(err.message || "Түгжихэд алдаа");
     } finally {
       setActionId("");
     }
@@ -127,133 +93,102 @@ export default function AgentPage() {
         const firstItem = o.items?.[0] || {};
         const firstTitle = firstItem.title || "Барааны нэр ороогүй";
         const thumb = firstItem.images?.[0] || firstItem.imageUrl || "/marketplace/taobao.png";
-        const platformIcon = APP_ICONS[firstItem.app] || APP_ICONS.any;
-        const totalCny = o.report?.pricing?.grandTotalCny;
-        return { ...o, totalQty, firstTitle, thumb, platformIcon, totalCny };
+        return { ...o, totalQty, firstTitle, thumb };
       }),
     [orders]
   );
 
-  const cardBg = "bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white";
-
   return (
-    <main className={`${mainClass} min-h-screen`}>
-      <div className={`${widthClass} mx-auto px-4 py-10 space-y-6`}>
-        <div className="flex items-center justify-between">
-          <Link href="/" className="text-sm opacity-70 hover:text-emerald-600">
-            ← Буцах
-          </Link>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={manualRefresh}
-              disabled={refreshing}
-              className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 hover:border-emerald-300 disabled:opacity-60"
-            >
-              {refreshing ? "Шинэчилж..." : "Шинэчлэх"}
-            </button>
-            <Link href="/agent/history" className="text-xs md:text-sm text-emerald-600 hover:text-emerald-500">
+    <main className="page-container has-mobile-nav">
+      <div className="container-responsive py-responsive space-y-4 sm:space-y-6">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <Link href="/" className="back-link">← Буцах</Link>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <Button onClick={manualRefresh} loading={refreshing} variant="outline" size="sm" className="flex-1 sm:flex-none">
+              🔄 Шинэчлэх
+            </Button>
+            <Link href="/agent/history" className="link-primary text-xs sm:text-sm font-medium whitespace-nowrap">
               Миний захиалгууд
             </Link>
           </div>
         </div>
 
-        <h1 className="text-2xl font-semibold">Нээлттэй захиалгууд</h1>
-        <p className="text-sm opacity-70">
-          Агент түгжээгүй, ажиллахад бэлэн байгаа хэрэглэгчийн захиалгууд.
-        </p>
+        <header className="page-header">
+          <h1 className="page-title flex items-center gap-2 sm:gap-3">
+            <span className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl surface-muted flex items-center justify-center text-lg sm:text-xl">🔍</span>
+            <span>Нээлттэй захиалгууд</span>
+          </h1>
+          <p className="page-subtitle">
+            Түгжээгүй, ажиллахад бэлэн захиалгууд.
+          </p>
+        </header>
 
-        {error && (
-          <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-600">
-            {error}
-          </div>
-        )}
+        {error && <div className="error-box">{error}</div>}
 
         {loading ? (
-          <div className="rounded-2xl border border-dashed border-slate-300 px-4 py-6 text-center text-sm opacity-70">
-            Уншиж байна...
+          <div className="space-y-3 sm:space-y-4">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="skeleton h-32 sm:h-40 rounded-xl sm:rounded-2xl" />
+            ))}
           </div>
         ) : mapped.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-300 px-4 py-6 text-center text-sm opacity-70">
-            Одоогоор нээлттэй захиалга алга.
+          <div className="empty-state animate-fade-in">
+            <p className="text-3xl sm:text-4xl mb-2 sm:mb-3">📭</p>
+            <p className="text-sm sm:text-base">Одоогоор нээлттэй захиалга алга.</p>
           </div>
         ) : (
-          <div className="space-y-3">
-            {mapped.map((order) => {
-              const statusInfo = {
-                label: STATUS_LABEL[order.status] || order.status,
-                tone: STATUS_TONE[order.status] || STATUS_TONE.PUBLISHED,
-              };
+          <div className="space-y-3 sm:space-y-4">
+            {mapped.map((order, idx) => {
+              const statusConfig = STATUS_CONFIG[order.status] || { label: order.status, color: "chip" };
               return (
-                <article
-                  key={order._id}
-                  className={`rounded-3xl p-4 shadow-md ${cardBg} border border-slate-700/40 min-h-[180px] flex flex-col gap-3`}
+                <article 
+                  key={order._id} 
+                  className="order-card-dark rounded-xl sm:rounded-2xl p-4 sm:p-5 card-interactive animate-slide-up"
+                  style={{animationDelay: `${idx * 0.05}s`}}
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2 text-xs text-slate-200">
-                        <img src={order.platformIcon} alt="app" className="h-5 w-5 rounded" />
-                        <span className="font-semibold tracking-wide">AGENTBUY</span>
-                        <span className="text-[11px] opacity-80">#{order._id.slice(-6)}</span>
+                  <div className="flex gap-3 sm:gap-4">
+                    {/* Thumbnail */}
+                    <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-lg sm:rounded-xl overflow-hidden bg-white/10 shrink-0">
+                      <img src={order.thumb} alt={order.firstTitle} className="img-cover" />
+                    </div>
+                    
+                    {/* Content */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2 mb-1.5 sm:mb-2">
+                        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                          <span className="text-[10px] sm:text-xs font-mono opacity-70">#{order._id.slice(-6)}</span>
+                          <span className={`status-badge ${statusConfig.color}`}>
+                            {statusConfig.label}
+                          </span>
+                        </div>
+                        <span className="text-[10px] sm:text-xs opacity-60 whitespace-nowrap">{formatDate(order.createdAt)}</span>
                       </div>
-                      <div className="text-xs text-slate-200">Order Card</div>
-                      <div className="text-[11px] text-slate-300">
-                        Карго: {order.cargoId?.name || order.cargoId || "Тодорхойгүй"}
+                      
+                      <h3 className="font-semibold text-white text-sm sm:text-base line-clamp-1 mb-1.5 sm:mb-2">{order.firstTitle}</h3>
+                      
+                      <div className="flex items-center gap-2 sm:gap-3 text-[10px] sm:text-xs opacity-70 mb-2 sm:mb-3 flex-wrap">
+                        <span>📦 {order.items?.length || 0}</span>
+                        <span>🔢 {order.totalQty}</span>
+                        <span className="hidden sm:inline">🚚 {order.cargoId?.name || "Карго"}</span>
                       </div>
-                    </div>
-                    <div className="h-24 w-28 rounded-xl overflow-hidden bg-slate-700 border border-slate-600">
-                      <img
-                        src={order.thumb}
-                        alt={order.firstTitle}
-                        className="h-full w-full object-cover"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="mt-3 space-y-1 text-xs text-slate-200">
-                    <div className="flex items-center gap-2">
-                      <span>📅</span>
-                      <span>{formatDate(order.createdAt)}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span>🛒</span>
-                      <span className="line-clamp-1 text-sm font-semibold text-white">
-                        {order.firstTitle}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] opacity-80">
-                        Нийт мөр: {order.items?.length || 0} • Тоо ширхэг: {order.totalQty}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="rounded-full px-2 py-1 text-[11px] text-white">
-                        <span className={`${statusInfo.tone} px-2 py-1 rounded-full`}>
-                          {statusInfo.label}
-                        </span>
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 flex items-center justify-between">
-                    <div className="text-lg font-semibold">
-                      {order.totalCny ? `${order.totalCny} ¥` : ""}{" "}
-                      <span className="text-xs opacity-80">({order.totalQty} ширхэг)</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Link
-                        href={`/agent/orders/${order._id}`}
-                        className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white hover:bg-white/20 border border-white/20"
-                      >
-                        Дэлгэрэнгүй
-                      </Link>
-                      <button
-                        disabled={actionId === order._id}
-                        onClick={() => lockOrder(order._id)}
-                        className="rounded-full bg-emerald-500 px-3 py-1 text-xs font-semibold text-white hover:bg-emerald-400 disabled:opacity-70"
-                      >
-                        {actionId === order._id ? "Түгжиж..." : "Түгжих"}
-                      </button>
+                      
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                        <Link href={`/agent/orders/${order._id}`} className="block sm:inline">
+                          <Button variant="outline" size="sm" fullWidth className="border-white/20 text-white hover:bg-white/10 text-xs sm:text-sm">
+                            Дэлгэрэнгүй
+                          </Button>
+                        </Link>
+                        <Button 
+                          onClick={() => lockOrder(order._id)} 
+                          loading={actionId === order._id}
+                          size="sm"
+                          fullWidth
+                          className="text-xs sm:text-sm sm:w-auto"
+                        >
+                          🔒 Түгжих
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </article>
@@ -262,6 +197,22 @@ export default function AgentPage() {
           </div>
         )}
       </div>
+
+      {/* Mobile Bottom Nav */}
+      <nav className="mobile-nav">
+        <Link href="/agent" className="mobile-nav-item active">
+          <span>🏠</span>
+          <span>Нүүр</span>
+        </Link>
+        <Link href="/agent/history" className="mobile-nav-item">
+          <span>📋</span>
+          <span>Түүх</span>
+        </Link>
+        <Link href="/agent/profile" className="mobile-nav-item">
+          <span>👤</span>
+          <span>Профайл</span>
+        </Link>
+      </nav>
     </main>
   );
 }

@@ -2,42 +2,13 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useUI } from "../layout";
 import { api } from "@/lib/api";
-
-const CARGOS = [
-  { id: "darkhan", name: "Darkhan Cargo" },
-  { id: "ubexpress", name: "UB Express Cargo" },
-  { id: "fastasia", name: "Fast Asia Cargo" },
-];
+import Button from "@/components/ui/Button";
 
 export default function UserEntryPage() {
-  const { theme, view } = useUI();
-  const [selectedCargo, setSelectedCargo] = useState(CARGOS[0].id);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-
-  const mainClass =
-    theme === "night"
-      ? "bg-slate-950 text-slate-50"
-      : theme === "mid"
-        ? "bg-slate-200 text-slate-900"
-        : "bg-slate-100 text-slate-900";
-
-  const cardClass =
-    theme === "night"
-      ? "bg-slate-900 border-slate-700"
-      : theme === "mid"
-        ? "bg-slate-100 border-slate-300"
-        : "bg-white border-slate-200";
-
-  const widthClass =
-    view === "mobile"
-      ? "max-w-md"
-      : view === "tablet"
-        ? "max-w-3xl"
-        : "max-w-6xl";
 
   useEffect(() => {
     let alive = true;
@@ -47,9 +18,6 @@ export default function UserEntryPage() {
         const me = await api("/api/auth/me");
         if (!alive) return;
         setProfile(me);
-        if (me.defaultCargoId) {
-          setSelectedCargo(me.defaultCargoId);
-        }
       } catch (err) {
         if (!alive) return;
         setError(err.message || "Профайл уншихад алдаа гарлаа");
@@ -58,101 +26,122 @@ export default function UserEntryPage() {
       }
     }
     load();
-    return () => {
-      alive = false;
-    };
+    return () => { alive = false; };
   }, []);
 
-  const selectedCargoLabel =
-    CARGOS.find((c) => c.id === selectedCargo)?.name || "Сонгоогүй";
-
   return (
-    <main className={`${mainClass} min-h-screen`}>
-      <div className={`${widthClass} mx-auto px-4 py-10 space-y-6`}>
-        <Link href="/" className="text-sm opacity-70">
-          ← Буцах
-        </Link>
+    <main className="page-container has-mobile-nav">
+      <div className="container-responsive py-responsive space-y-4 sm:space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <Link href="/" className="back-link">← Буцах</Link>
+          <Link href="/auth/login" className="link-primary text-xs sm:text-sm">Гарах</Link>
+        </div>
 
-        <header className="space-y-2">
-          <h1 className="text-2xl md:text-3xl font-semibold">
-            Хэрэглэгчийн самбар
+        <header className="page-header">
+          <h1 className="page-title flex items-center gap-2 sm:gap-3">
+            <span className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl surface-muted flex items-center justify-center text-lg sm:text-xl">🛒</span>
+            <span>Хэрэглэгчийн самбар</span>
           </h1>
-          <p className="text-sm opacity-80">
-            Картын үлдэгдэл, захиалгын үндсэн урсгалаа эндээс эхлүүлнэ.
+          <p className="page-subtitle">
+            Картын үлдэгдэл, захиалгын үндсэн урсгал.
           </p>
         </header>
 
-        {error && (
-          <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-600">
-            {error}
-          </div>
-        )}
+        {error && <div className="error-box">{error}</div>}
 
-        <section
-          className={`rounded-2xl border px-4 py-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3 ${cardClass}`}
-        >
-          <div className="space-y-1">
-            <p className="text-sm font-medium">Картын үлдэгдэл</p>
-            <p className="text-xs opacity-70">
-              Нэг захиалга нийтлэхэд 1 карт зарцуулна. Амжилттай дуусвал буцаан олгоно.
-            </p>
+        {/* Card Balance */}
+        <section className="surface-card rounded-xl sm:rounded-2xl card-padding animate-fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-center gap-3 sm:gap-4">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center text-xl sm:text-2xl text-white shrink-0">
+                💳
+              </div>
+              <div>
+                <p className="text-xs sm:text-sm text-secondary">Картын үлдэгдэл</p>
+                <p className="text-xl sm:text-2xl font-bold">
+                  {loading ? "..." : `${profile?.cardBalance ?? 0}`}
+                  <span className="text-xs sm:text-sm font-normal text-muted ml-1">карт</span>
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 pl-13 sm:pl-0">
+              <div className="flex-1 sm:w-24 h-2 rounded-full surface-muted overflow-hidden">
+                <div 
+                  className="h-full bg-[var(--accent-primary)] rounded-full transition-all"
+                  style={{ width: `${((profile?.cardProgress ?? 0) / 2) * 100}%` }}
+                />
+              </div>
+              <span className="text-xs font-medium whitespace-nowrap">{profile?.cardProgress ?? 0}/2</span>
+            </div>
           </div>
-
-          <div className="flex flex-col items-start gap-1">
-            <p className="text-lg font-semibold">
-              {loading ? "..." : `${profile?.cardBalance ?? 0} карт`}
-            </p>
-            <p className="text-[11px] opacity-70">
-              Бонусын ахиц: {profile?.cardProgress ?? 0} / 2
-            </p>
-          </div>
+          <p className="text-xs text-muted mt-3 pt-3 border-t border-[var(--surface-card-border)]">
+            💡 1 захиалга = 1 карт. Амжилттай бол буцаана.
+          </p>
         </section>
 
-
-
-        <section className="grid gap-4 md:grid-cols-2">
-          <Link
-            href={{
-              pathname: "/user/single",
-              query: { cargo: selectedCargo },
-            }}
-            className={`rounded-2xl border p-5 space-y-3 hover:shadow-md transition block ${cardClass}`}
-          >
-            <h2 className="text-lg font-semibold">Ганц бараа захиалах</h2>
-            <p className="text-sm opacity-80">
-              Нэг барааны мэдээлэл, зураг, линк, тоо ширхэгээ оруулаад нийтэлнэ.
-            </p>
-            <p className="text-xs opacity-70">
-              Карго: <span className="font-medium">{selectedCargoLabel}</span>
-            </p>
+        {/* Action Cards */}
+        <section className="grid-auto-fit">
+          <Link href="/user/single" className="surface-card rounded-xl sm:rounded-2xl card-padding card-interactive block animate-slide-up">
+            <div className="flex items-start gap-3 sm:gap-4">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-xl sm:text-2xl text-white shrink-0">
+                📦
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-card-title">Ганц бараа</h2>
+                <p className="text-xs sm:text-sm text-secondary mt-0.5 sm:mt-1 line-clamp-2">
+                  Нэг барааны мэдээлэл оруулаад нийтлэх.
+                </p>
+              </div>
+            </div>
           </Link>
 
-          <Link
-            href={{
-              pathname: "/user/batch",
-              query: { cargo: selectedCargo },
-            }}
-            className={`rounded-2xl border p-5 space-y-3 hover:shadow-md transition block ${cardClass}`}
-          >
-            <h2 className="text-lg font-semibold">Багц захиалга</h2>
-            <p className="text-sm opacity-80">
-              Олон барааг нэг дор оруулах (10 хүртэл). Багц захиалгыг нийтлэхэд мөн 1 карт зарцуулна.
-            </p>
-            <p className="text-xs opacity-70">
-              Карго: <span className="font-medium">{selectedCargoLabel}</span>
-            </p>
+          <Link href="/user/batch" className="surface-card rounded-xl sm:rounded-2xl card-padding card-interactive block animate-slide-up" style={{animationDelay: '0.1s'}}>
+            <div className="flex items-start gap-3 sm:gap-4">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center text-xl sm:text-2xl text-white shrink-0">
+                📚
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-card-title">Багц захиалга</h2>
+                <p className="text-xs sm:text-sm text-secondary mt-0.5 sm:mt-1 line-clamp-2">
+                  10 хүртэл бараа нэг дор оруулах.
+                </p>
+              </div>
+            </div>
           </Link>
         </section>
 
-        <section>
-          <Link
-            href="/user/requests"
-            className="text-xs text-emerald-600 hover:text-emerald-500"
-          >
-            Өмнөх захиалгуудыг харах
+        {/* History Link */}
+        <section className="surface-card rounded-xl sm:rounded-2xl p-3 sm:p-4 animate-slide-up" style={{animationDelay: '0.2s'}}>
+          <Link href="/user/requests" className="flex items-center justify-between group touch-target">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <span className="text-lg sm:text-xl">📋</span>
+              <span className="text-sm sm:text-base font-medium">Өмнөх захиалгууд</span>
+            </div>
+            <span className="text-muted group-hover:text-[var(--accent-primary)] transition-colors text-lg">→</span>
           </Link>
         </section>
       </div>
+
+      {/* Mobile Bottom Nav */}
+      <nav className="mobile-nav">
+        <Link href="/user" className="mobile-nav-item active">
+          <span>🏠</span>
+          <span>Нүүр</span>
+        </Link>
+        <Link href="/user/requests" className="mobile-nav-item">
+          <span>📋</span>
+          <span>Захиалга</span>
+        </Link>
+        <Link href="/user/profile" className="mobile-nav-item">
+          <span>👤</span>
+          <span>Профайл</span>
+        </Link>
+        <Link href="/user/single" className="mobile-nav-item">
+          <span>➕</span>
+          <span>Шинэ</span>
+        </Link>
+      </nav>
     </main>
   );
 }

@@ -2,25 +2,8 @@
 
 import RoleCard from "./_component/rolecard";
 import MarketplaceBadge from "./_component/MarketplaceBadge";
-import { useUI } from "./layout";
 
 export default function HomePage() {
-  const { theme, view } = useUI();
-
-  const main =
-    theme === "night"
-      ? "bg-slate-950 text-slate-50"
-      : theme === "mid"
-        ? "bg-slate-200 text-slate-900"
-        : "bg-slate-100 text-slate-900";
-
-  const width =
-    view === "mobile"
-      ? "max-w-md"
-      : view === "tablet"
-        ? "max-w-3xl"
-        : "max-w-6xl";
-
   const marketplaces = [
     { name: "Taobao", icon: "/marketplace/taobao.png" },
     { name: "Pinduoduo", icon: "/marketplace/pinduoudo.png" },
@@ -29,40 +12,75 @@ export default function HomePage() {
   ];
 
   return (
-    <main className={`min-h-screen ${main}`}>
-      <div className={`${width} mx-auto px-4 py-12 space-y-10`}>
+    <main className="page-container">
+      <div className="container-responsive py-responsive space-y-8 sm:space-y-10 lg:space-y-12">
 
-        <header className="text-center space-y-3">
-          <h1 className="text-3xl font-semibold">
-            Welcome to <span className="text-emerald-500">AgentBuy</span>
+        {/* Hero Section */}
+        <header className="text-center space-y-4 animate-fade-in">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 sm:px-4 sm:py-2 rounded-full surface-muted text-xs sm:text-sm">
+            <span className="w-2 h-2 bg-[var(--accent-primary)] rounded-full animate-pulse-dot" />
+            <span className="text-secondary">Хятад бараа захиалгын платформ</span>
+          </div>
+          
+          <h1 className="text-hero">
+            <span className="text-[var(--text-primary)]">Тавтай морил, </span>
+            <span className="text-[var(--accent-primary)]">AgentBuy</span>
           </h1>
-          <p className="text-sm opacity-70">
-            Монгол хэрэглэгчид Хятадын зах зээлээс бараа хайж, агентуудаар судалгаа хийлгэн захиалах нэг цэгийн үйлчилгээ.
+          
+          <p className="text-secondary text-sm sm:text-base max-w-xl mx-auto px-4">
+            Монгол хэрэглэгчид Хятадын зах зээлээс бараа хайж, 
+            агентуудаар судалгаа хийлгэн захиалах нэг цэгийн үйлчилгээ.
           </p>
         </header>
 
-        <section className="grid gap-6 md:grid-cols-2">
+        {/* Role Cards */}
+        <section className="grid-auto-fit animate-slide-up" style={{animationDelay: '0.1s'}}>
           <RoleCard
-            title="I'm a User"
+            title="Хэрэглэгч"
             desc="Хятадын сайтуудаас бараа хайж, агентуудаас үнэ санал авч захиалга өгөх."
             href="/auth/login?role=user"
-            accent="bg-emerald-600 hover:bg-emerald-500"
+            accent="primary"
+            icon="🛒"
           />
 
           <RoleCard
-            title="I'm an Agent"
+            title="Агент"
             desc="Шинэ захиалгуудыг түгжиж судалгаа хийн тайлан илгээх."
             href="/auth/login?role=agent"
-            accent="bg-emerald-600 hover:bg-emerald-500"
+            accent="secondary"
+            icon="🔍"
           />
         </section>
 
-        <section className="space-y-4">
-          <h3 className="font-semibold">Дэмждэг маркетплейсүүд</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+        {/* Marketplace Section */}
+        <section className="space-y-4 animate-slide-up" style={{animationDelay: '0.2s'}}>
+          <div className="flex items-center gap-3">
+            <h3 className="text-base sm:text-lg font-semibold whitespace-nowrap">Дэмждэг маркетплейсүүд</h3>
+            <div className="flex-1 h-px bg-[var(--surface-card-border)]" />
+          </div>
+          
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
             {marketplaces.map((m) => (
               <MarketplaceBadge key={m.name} name={m.name} icon={m.icon} />
             ))}
+          </div>
+        </section>
+
+        {/* Stats Section */}
+        <section className="surface-card rounded-2xl sm:rounded-3xl card-padding animate-slide-up" style={{animationDelay: '0.3s'}}>
+          <div className="grid-stats text-center">
+            <div className="p-2 sm:p-4">
+              <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-[var(--accent-primary)]">500+</p>
+              <p className="text-xs sm:text-sm text-muted mt-1">Хэрэглэгч</p>
+            </div>
+            <div className="p-2 sm:p-4 border-x border-[var(--surface-card-border)]">
+              <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-[var(--accent-secondary)]">50+</p>
+              <p className="text-xs sm:text-sm text-muted mt-1">Агент</p>
+            </div>
+            <div className="p-2 sm:p-4">
+              <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-[var(--accent-warning)]">2000+</p>
+              <p className="text-xs sm:text-sm text-muted mt-1">Захиалга</p>
+            </div>
           </div>
         </section>
       </div>

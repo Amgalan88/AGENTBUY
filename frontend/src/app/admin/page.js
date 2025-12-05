@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { getSocket } from "@/lib/socket";
+import Button from "@/components/ui/Button";
 
 const statusTone = {
   WAITING_PAYMENT: "bg-amber-100 text-amber-700 border-amber-200",
@@ -10,7 +11,11 @@ const statusTone = {
 };
 
 const Pill = ({ tone, children }) => (
-  <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${tone || "bg-slate-100 text-slate-700 border-slate-200"}`}>
+  <span
+    className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${
+      tone || "bg-slate-100 text-slate-700 border-slate-200"
+    }`}
+  >
     {children}
   </span>
 );
@@ -31,7 +36,12 @@ export default function AdminPage() {
   const [orders, setOrders] = useState([]);
   const [agents, setAgents] = useState([]);
   const [cargos, setCargos] = useState([]);
-  const [settings, setSettings] = useState({ cnyRate: "", bankName: "", bankAccount: "", bankOwner: "" });
+  const [settings, setSettings] = useState({
+    cnyRate: "",
+    bankName: "",
+    bankAccount: "",
+    bankOwner: "",
+  });
   const [settingsBackup, setSettingsBackup] = useState(null);
   const [editingRate, setEditingRate] = useState(false);
   const [editingBank, setEditingBank] = useState(false);
@@ -41,7 +51,12 @@ export default function AdminPage() {
   const [savingSettings, setSavingSettings] = useState(false);
   const [cargoSaving, setCargoSaving] = useState("");
   const [showCargoForm, setShowCargoForm] = useState(false);
-  const [newCargo, setNewCargo] = useState({ name: "", description: "", siteUrl: "", contactPhone: "" });
+  const [newCargo, setNewCargo] = useState({
+    name: "",
+    description: "",
+    siteUrl: "",
+    contactPhone: "",
+  });
   const [trackingDraft, setTrackingDraft] = useState({});
   const [trackingSaving, setTrackingSaving] = useState("");
   const [paidFrom, setPaidFrom] = useState("");
@@ -71,12 +86,13 @@ export default function AdminPage() {
       try {
         const ok = await checkAuth();
         if (!ok) return;
-        const [ordersData, agentsData, cargosData, settingsData] = await Promise.all([
-          api("/api/admin/orders"),
-          api("/api/admin/agents"),
-          api("/api/admin/cargos"),
-          api("/api/admin/settings"),
-        ]);
+        const [ordersData, agentsData, cargosData, settingsData] =
+          await Promise.all([
+            api("/api/admin/orders"),
+            api("/api/admin/agents"),
+            api("/api/admin/cargos"),
+            api("/api/admin/settings"),
+          ]);
         if (!alive) return;
         setOrders(ordersData || []);
         setAgents(agentsData || []);
@@ -108,20 +124,41 @@ export default function AdminPage() {
     };
   }, [router]);
 
-  const waiting = useMemo(() => orders.filter((o) => o.status === "WAITING_PAYMENT"), [orders]);
-  const pendingAgents = useMemo(() => agents.filter((a) => a.verificationStatus === "pending"), [agents]);
-  const activeAgents = useMemo(() => agents.filter((a) => a.verificationStatus === "verified"), [agents]);
+  const waiting = useMemo(
+    () => orders.filter((o) => o.status === "WAITING_PAYMENT"),
+    [orders]
+  );
+  const pendingAgents = useMemo(
+    () => agents.filter((a) => a.verificationStatus === "pending"),
+    [agents]
+  );
+  const activeAgents = useMemo(
+    () => agents.filter((a) => a.verificationStatus === "verified"),
+    [agents]
+  );
   const rate = Number(settings.cnyRate) || 0;
-  const uniqueUsers = useMemo(() => new Set(orders.map((o) => o.userId?.toString() || o.userId || "")).size, [orders]);
+  const uniqueUsers = useMemo(
+    () =>
+      new Set(orders.map((o) => o.userId?.toString() || o.userId || "")).size,
+    [orders]
+  );
   const totalPaidMnt = useMemo(
     () =>
       orders.reduce((sum, o) => {
-        if (o.payment?.status === "confirmed" && o.payment?.amountMnt) return sum + Number(o.payment.amountMnt);
+        if (o.payment?.status === "confirmed" && o.payment?.amountMnt)
+          return sum + Number(o.payment.amountMnt);
         return sum;
       }, 0),
     [orders]
   );
-  const confirmedOrders = useMemo(() => orders.filter((o) => o.payment?.status === "confirmed" || o.status === "PAYMENT_CONFIRMED"), [orders]);
+  const confirmedOrders = useMemo(
+    () =>
+      orders.filter(
+        (o) =>
+          o.payment?.status === "confirmed" || o.status === "PAYMENT_CONFIRMED"
+      ),
+    [orders]
+  );
   const filteredConfirmed = useMemo(() => {
     if (!paidFrom && !paidTo) return confirmedOrders;
     const from = paidFrom ? new Date(paidFrom) : null;
@@ -151,7 +188,9 @@ export default function AdminPage() {
     setActionId(id);
     setError("");
     try {
-      const updated = await api(`/api/admin/orders/${id}/confirm-payment`, { method: "POST" });
+      const updated = await api(`/api/admin/orders/${id}/confirm-payment`, {
+        method: "POST",
+      });
       setOrders((prev) => prev.map((o) => (o._id === id ? updated : o)));
     } catch (err) {
       setError(err.message || "Төлбөр батлахад алдаа гарлаа.");
@@ -168,7 +207,9 @@ export default function AdminPage() {
         method: "POST",
         body: JSON.stringify({ status }),
       });
-      setAgents((prev) => prev.map((a) => (a.userId?._id === userId ? { ...a, ...updated } : a)));
+      setAgents((prev) =>
+        prev.map((a) => (a.userId?._id === userId ? { ...a, ...updated } : a))
+      );
     } catch (err) {
       setError(err.message || "Агентыг баталгаажуулахад алдаа гарлаа.");
     } finally {
@@ -184,9 +225,17 @@ export default function AdminPage() {
         method: "POST",
         body: JSON.stringify({ isActive }),
       });
-      setAgents((prev) => prev.map((a) => (a.userId?._id === userId ? { ...a, userId: { ...a.userId, isActive } } : a)));
+      setAgents((prev) =>
+        prev.map((a) =>
+          a.userId?._id === userId
+            ? { ...a, userId: { ...a.userId, isActive } }
+            : a
+        )
+      );
     } catch (err) {
-      setError(err.message || "Агентийг идэвхжүүлэх/идэвхгүй болгох үед алдаа гарлаа.");
+      setError(
+        err.message || "Агентийг идэвхжүүлэх/идэвхгүй болгох үед алдаа гарлаа."
+      );
     } finally {
       setActionId("");
     }
@@ -201,7 +250,12 @@ export default function AdminPage() {
         body: JSON.stringify({
           ...settings,
           ...patch,
-          cnyRate: patch.cnyRate !== undefined ? Number(patch.cnyRate) : settings.cnyRate ? Number(settings.cnyRate) : "",
+          cnyRate:
+            patch.cnyRate !== undefined
+              ? Number(patch.cnyRate)
+              : settings.cnyRate
+              ? Number(settings.cnyRate)
+              : "",
         }),
       });
       setSettings((prev) => ({ ...prev, ...saved }));
@@ -251,7 +305,9 @@ export default function AdminPage() {
       });
       setCargos((prev) => prev.map((c) => (c._id === id ? updated : c)));
     } catch (err) {
-      setError(err.message || "Карго идэвхжүүлэх/идэвхгүй болгох үед алдаа гарлаа.");
+      setError(
+        err.message || "Карго идэвхжүүлэх/идэвхгүй болгох үед алдаа гарлаа."
+      );
     } finally {
       setCargoSaving("");
     }
@@ -291,9 +347,13 @@ export default function AdminPage() {
       <div className="max-w-6xl mx-auto px-4 py-10 space-y-6">
         <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-xs text-slate-500 uppercase tracking-[0.25em]">Admin</p>
+            <p className="text-xs text-slate-500 uppercase tracking-[0.25em]">
+              Admin
+            </p>
             <h1 className="text-2xl font-semibold">AgentBuy админ самбар</h1>
-            <p className="text-sm text-slate-600">Захиалга, агент, карго, төлбөрийг нэг цонхоор удирдана.</p>
+            <p className="text-sm text-slate-600">
+              Захиалга, агент, карго, төлбөрийг нэг цонхоор удирдана.
+            </p>
           </div>
         </header>
 
@@ -306,28 +366,37 @@ export default function AdminPage() {
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-2xl border border-slate-200 bg-white/90 px-4 py-3 shadow-sm">
             <p className="text-xs text-slate-500">Нийт захиалга</p>
-            <p className="text-xl font-semibold text-slate-900">{orders.length}</p>
+            <p className="text-xl font-semibold text-slate-900">
+              {orders.length}
+            </p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white/90 px-4 py-3 shadow-sm">
             <p className="text-xs text-slate-500">Идэвхтэй агент</p>
             <p className="text-xl font-semibold text-slate-900">
-              {activeAgents.length} <span className="text-xs text-slate-500">/ {agents.length}</span>
+              {activeAgents.length}{" "}
+              <span className="text-xs text-slate-500">/ {agents.length}</span>
             </p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white/90 px-4 py-3 shadow-sm">
             <p className="text-xs text-slate-500">Давхардсан хэрэглэгч</p>
-            <p className="text-xl font-semibold text-slate-900">{uniqueUsers}</p>
+            <p className="text-xl font-semibold text-slate-900">
+              {uniqueUsers}
+            </p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white/90 px-4 py-3 shadow-sm">
             <p className="text-xs text-slate-500">Баталгаажсан төлбөр (₮)</p>
-            <p className="text-xl font-semibold text-slate-900">{totalPaidMnt ? totalPaidMnt.toLocaleString() : "0"}</p>
+            <p className="text-xl font-semibold text-slate-900">
+              {totalPaidMnt ? totalPaidMnt.toLocaleString() : "0"}
+            </p>
           </div>
         </section>
 
         <section className="grid gap-6">
           <div className="rounded-3xl border w-full border-slate-200 bg-white/80 shadow-sm">
             <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
-              <h3 className="text-base font-semibold">Төлбөр хүлээж байгаа ({waiting.length})</h3>
+              <h3 className="text-base font-semibold">
+                Төлбөр хүлээж байгаа ({waiting.length})
+              </h3>
             </div>
             <div className="w-full">
               <table className="min-w-full divide-y divide-slate-200">
@@ -347,7 +416,10 @@ export default function AdminPage() {
                 <tbody className="divide-y divide-slate-100 text-sm">
                   {waiting.length === 0 && (
                     <tr>
-                      <td colSpan={9} className="px-4 py-6 text-center text-slate-500">
+                      <td
+                        colSpan={9}
+                        className="px-4 py-6 text-center text-slate-500"
+                      >
                         Төлбөр хүлээх захиалга алга.
                       </td>
                     </tr>
@@ -355,58 +427,96 @@ export default function AdminPage() {
                   {waiting.map((order) => {
                     const cargoName = order.cargoId?.name || "Карго сонгоогүй";
                     const itemCount = order.items?.length || 0;
-                    const qty = order.items?.reduce((s, it) => s + (it.quantity || 0), 0) || 0;
-                    const totalCny = order.report?.pricing?.grandTotalCny || order.report?.priceCny || 0;
+                    const qty =
+                      order.items?.reduce(
+                        (s, it) => s + (it.quantity || 0),
+                        0
+                      ) || 0;
+                    const totalCny =
+                      order.report?.pricing?.grandTotalCny ||
+                      order.report?.priceCny ||
+                      0;
                     const totalMnt = rate ? Math.round(totalCny * rate) : null;
                     return (
                       <tr key={order._id} className="hover:bg-slate-50/80">
-                        <td className="px-4 py-3 font-mono text-xs text-slate-700">#{order._id?.slice(-6)}</td>
-                        <td className="px-4 py-3">
-                          <Pill tone={statusTone[order.status] || undefined}>{order.status}</Pill>
+                        <td className="px-4 py-3 font-mono text-xs text-slate-700">
+                          #{order._id?.slice(-6)}
                         </td>
-                        <td className="px-4 py-3 text-slate-700">{cargoName}</td>
+                        <td className="px-4 py-3">
+                          <Pill tone={statusTone[order.status] || undefined}>
+                            {order.status}
+                          </Pill>
+                        </td>
+                        <td className="px-4 py-3 text-slate-700">
+                          {cargoName}
+                        </td>
                         <td className="px-4 py-3 text-slate-700">
                           {itemCount} бараа / {qty} ширхэг
                         </td>
-                        <td className="px-4 py-3 text-slate-600">{formatDate(order.createdAt)}</td>
+                        <td className="px-4 py-3 text-slate-600">
+                          {formatDate(order.createdAt)}
+                        </td>
                         <td className="px-4 py-3 text-slate-700">
                           {order.report?.paymentLink ? (
-                            <a href={order.report.paymentLink} target="_blank" rel="noreferrer" className="text-xs text-emerald-700 underline">
+                            <a
+                              href={order.report.paymentLink}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-xs text-emerald-700 underline"
+                            >
                               Төлбөрийн холбоос
                             </a>
                           ) : (
-                            <span className="text-xs text-slate-500">Одоогоор холбоосгүй</span>
+                            <span className="text-xs text-slate-500">
+                              Одоогоор холбоосгүй
+                            </span>
                           )}
                         </td>
                         <td className="px-4 py-3 text-slate-700">
-                          {totalCny || "-"} / {totalMnt ? totalMnt.toLocaleString() : "-"}
+                          {totalCny || "-"} /{" "}
+                          {totalMnt ? totalMnt.toLocaleString() : "-"}
                         </td>
                         <td className="px-4 py-3 text-slate-700">
                           <div className="flex items-center gap-2">
                             <input
                               type="text"
-                              value={trackingDraft[order._id] ?? order.tracking?.code ?? ""}
-                              onChange={(e) => setTrackingDraft((p) => ({ ...p, [order._id]: e.target.value }))}
+                              value={
+                                trackingDraft[order._id] ??
+                                order.tracking?.code ??
+                                ""
+                              }
+                              onChange={(e) =>
+                                setTrackingDraft((p) => ({
+                                  ...p,
+                                  [order._id]: e.target.value,
+                                }))
+                              }
                               className="w-28 rounded-md border px-2 py-1 text-xs"
                               placeholder="TRK код"
                             />
-                            <button
+                            <Button
                               disabled={trackingSaving === order._id}
                               onClick={() => handleTrackingSave(order._id)}
-                              className="rounded-md bg-slate-900 px-2 py-1 text-[11px] font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+                              variant="secondary"
+                              size="sm"
+                              className="px-2 py-1 text-[11px]"
                             >
-                              {trackingSaving === order._id ? "Хадгалж..." : "Хадгалах"}
-                            </button>
+                              {trackingSaving === order._id
+                                ? "Хадгалж..."
+                                : "Хадгалах"}
+                            </Button>
                           </div>
                         </td>
                         <td className="px-4 py-3">
-                          <button
+                          <Button
                             disabled={actionId === order._id}
                             onClick={() => handleConfirm(order._id)}
-                            className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-500 disabled:opacity-60"
+                            size="sm"
                           >
-                            {actionId === order._id ? "Баталгаажуулж..." : "Төлбөр батлах"}
-                          </button>
+                            {actionId === order._id
+                              ? "Баталгаажуулж..."
+                              : "Төлбөр батлах"}
+                          </Button>
                         </td>
                       </tr>
                     );
@@ -420,8 +530,12 @@ export default function AdminPage() {
           <div className="rounded-3xl border border-slate-200 bg-white/80 shadow-sm p-5 space-y-4">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <h3 className="text-base font-semibold">Ханш, дансны мэдээлэл</h3>
-                <p className="text-xs text-slate-500">Хэрэглэгчид харах төлбөрийн зааврыг энд шинэчилнэ.</p>
+                <h3 className="text-base font-semibold">
+                  Ханш, дансны мэдээлэл
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Хэрэглэгчид харах төлбөрийн зааврыг энд шинэчилнэ.
+                </p>
               </div>
               <div className="flex items-center gap-2">
                 <Pill>Шинэчлэл: {formatDate(settings.updatedAt)}</Pill>
@@ -433,73 +547,141 @@ export default function AdminPage() {
                   <p className="text-xs text-slate-500">Ханш (MNT/CNY)</p>
                   {editingRate ? (
                     <div className="flex gap-1">
-                      <button onClick={() => saveSettings({}, () => setEditingRate(false))} disabled={savingSettings} className="rounded-md bg-emerald-600 px-2 py-1 text-[11px] font-semibold text-white hover:bg-emerald-500 disabled:opacity-60">
+                      <Button
+                        onClick={() => saveSettings({}, () => setEditingRate(false))}
+                        disabled={savingSettings}
+                        size="sm"
+                        className="px-2 py-1 text-[11px]"
+                      >
                         {savingSettings ? "Хадгалж..." : "Хадгалах"}
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         onClick={() => {
                           if (settingsBackup) setSettings(settingsBackup);
                           setEditingRate(false);
                         }}
                         disabled={savingSettings}
-                        className="rounded-md bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-200 disabled:opacity-60"
+                        variant="outline"
+                        size="sm"
+                        className="px-2 py-1 text-[11px]"
                       >
                         Цуцлах
-                      </button>
+                      </Button>
                     </div>
                   ) : (
-                    <button onClick={() => setEditingRate(true)} className="rounded-md bg-slate-900 px-2 py-1 text-[11px] font-semibold text-white hover:bg-slate-700">
+                    <Button onClick={() => setEditingRate(true)} variant="secondary" size="sm" className="px-2 py-1 text-[11px]">
                       Засах
-                    </button>
+                    </Button>
                   )}
                 </div>
                 {editingRate ? (
                   <input
                     type="number"
                     value={settings.cnyRate || ""}
-                    onChange={(e) => setSettings((prev) => ({ ...prev, cnyRate: e.target.value }))}
+                    onChange={(e) =>
+                      setSettings((prev) => ({
+                        ...prev,
+                        cnyRate: e.target.value,
+                      }))
+                    }
                     className="w-full rounded-xl border px-3 py-2 text-sm"
                     placeholder="ж: 480"
                   />
                 ) : (
-                  <p className="text-base font-semibold text-slate-900">{settings.cnyRate ? `${settings.cnyRate}` : "Тохируулаагүй"}</p>
+                  <p className="text-base font-semibold text-slate-900">
+                    {settings.cnyRate ? `${settings.cnyRate}` : "Тохируулаагүй"}
+                  </p>
                 )}
               </div>
               <div className="rounded-xl border border-slate-200 bg-white/70 px-3 py-2 space-y-2">
                 <div className="flex items-center justify-between">
-                  <p className="text-xs text-slate-500">Банк, дансны мэдээлэл</p>
+                  <p className="text-xs text-slate-500">
+                    Банк, дансны мэдээлэл
+                  </p>
                   {editingBank ? (
                     <div className="flex gap-1">
-                      <button onClick={() => saveSettings({}, () => setEditingBank(false))} disabled={savingSettings} className="rounded-md bg-emerald-600 px-2 py-1 text-[11px] font-semibold text-white hover:bg-emerald-500 disabled:opacity-60">
+                      <Button
+                        onClick={() => saveSettings({}, () => setEditingBank(false))}
+                        disabled={savingSettings}
+                        size="sm"
+                        className="px-2 py-1 text-[11px]"
+                      >
                         {savingSettings ? "Хадгалж..." : "Хадгалах"}
-                      </button>
-                      <button onClick={handleBankCancel} disabled={savingSettings} className="rounded-md bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-200 disabled:opacity-60">
+                      </Button>
+                      <Button
+                        onClick={handleBankCancel}
+                        disabled={savingSettings}
+                        variant="outline"
+                        size="sm"
+                        className="px-2 py-1 text-[11px]"
+                      >
                         Цуцлах
-                      </button>
+                      </Button>
                     </div>
                   ) : (
-                    <button
+                    <Button
                       onClick={() => {
                         setSettingsBackup({ ...settings });
                         setEditingBank(true);
                       }}
-                      className="rounded-md bg-slate-900 px-2 py-1 text-[11px] font-semibold text-white hover:bg-slate-700"
+                      variant="secondary"
+                      size="sm"
+                      className="px-2 py-1 text-[11px]"
                     >
                       Засах
-                    </button>
+                    </Button>
                   )}
                 </div>
                 {editingBank ? (
                   <div className="grid gap-2">
-                    <input type="text" value={settings.bankName || ""} onChange={(e) => setSettings((prev) => ({ ...prev, bankName: e.target.value }))} className="rounded-xl border px-3 py-2 text-sm" placeholder="Банк" />
-                    <input type="text" value={settings.bankAccount || ""} onChange={(e) => setSettings((prev) => ({ ...prev, bankAccount: e.target.value }))} className="rounded-xl border px-3 py-2 text-sm" placeholder="Данс" />
-                    <input type="text" value={settings.bankOwner || ""} onChange={(e) => setSettings((prev) => ({ ...prev, bankOwner: e.target.value }))} className="rounded-xl border px-3 py-2 text-sm" placeholder="Эзэмшигч" />
+                    <input
+                      type="text"
+                      value={settings.bankName || ""}
+                      onChange={(e) =>
+                        setSettings((prev) => ({
+                          ...prev,
+                          bankName: e.target.value,
+                        }))
+                      }
+                      className="rounded-xl border px-3 py-2 text-sm"
+                      placeholder="Банк"
+                    />
+                    <input
+                      type="text"
+                      value={settings.bankAccount || ""}
+                      onChange={(e) =>
+                        setSettings((prev) => ({
+                          ...prev,
+                          bankAccount: e.target.value,
+                        }))
+                      }
+                      className="rounded-xl border px-3 py-2 text-sm"
+                      placeholder="Данс"
+                    />
+                    <input
+                      type="text"
+                      value={settings.bankOwner || ""}
+                      onChange={(e) =>
+                        setSettings((prev) => ({
+                          ...prev,
+                          bankOwner: e.target.value,
+                        }))
+                      }
+                      className="rounded-xl border px-3 py-2 text-sm"
+                      placeholder="Эзэмшигч"
+                    />
                   </div>
                 ) : (
                   <div className="text-sm space-y-1">
-                    <p className="font-semibold text-slate-900">{settings.bankName || "Банк: тохируулаагүй"}</p>
-                    <p className="font-semibold text-slate-900">{settings.bankAccount || "Данс: тохируулаагүй"}</p>
-                    <p className="font-semibold text-slate-900">{settings.bankOwner || "Эзэмшигч: тохируулаагүй"}</p>
+                    <p className="font-semibold text-slate-900">
+                      {settings.bankName || "Банк: тохируулаагүй"}
+                    </p>
+                    <p className="font-semibold text-slate-900">
+                      {settings.bankAccount || "Данс: тохируулаагүй"}
+                    </p>
+                    <p className="font-semibold text-slate-900">
+                      {settings.bankOwner || "Эзэмшигч: тохируулаагүй"}
+                    </p>
                   </div>
                 )}
               </div>
@@ -515,54 +697,122 @@ export default function AdminPage() {
               {showCargoForm ? (
                 <>
                   <div className="grid gap-2 sm:grid-cols-2">
-                    <input type="text" value={newCargo.name} onChange={(e) => setNewCargo((p) => ({ ...p, name: e.target.value }))} placeholder="Карго нэр" className="rounded-xl border px-3 py-2 text-sm" />
-                    <input type="text" value={newCargo.contactPhone} onChange={(e) => setNewCargo((p) => ({ ...p, contactPhone: e.target.value }))} placeholder="Утас" className="rounded-xl border px-3 py-2 text-sm" />
-                    <input type="text" value={newCargo.siteUrl} onChange={(e) => setNewCargo((p) => ({ ...p, siteUrl: e.target.value }))} placeholder="Вэб/линк" className="rounded-xl border px-3 py-2 text-sm" />
-                    <input type="text" value={newCargo.description} onChange={(e) => setNewCargo((p) => ({ ...p, description: e.target.value }))} placeholder="Тайлбар" className="rounded-xl border px-3 py-2 text-sm" />
+                    <input
+                      type="text"
+                      value={newCargo.name}
+                      onChange={(e) =>
+                        setNewCargo((p) => ({ ...p, name: e.target.value }))
+                      }
+                      placeholder="Карго нэр"
+                      className="rounded-xl border px-3 py-2 text-sm"
+                    />
+                    <input
+                      type="text"
+                      value={newCargo.contactPhone}
+                      onChange={(e) =>
+                        setNewCargo((p) => ({
+                          ...p,
+                          contactPhone: e.target.value,
+                        }))
+                      }
+                      placeholder="Утас"
+                      className="rounded-xl border px-3 py-2 text-sm"
+                    />
+                    <input
+                      type="text"
+                      value={newCargo.siteUrl}
+                      onChange={(e) =>
+                        setNewCargo((p) => ({ ...p, siteUrl: e.target.value }))
+                      }
+                      placeholder="Вэб/линк"
+                      className="rounded-xl border px-3 py-2 text-sm"
+                    />
+                    <input
+                      type="text"
+                      value={newCargo.description}
+                      onChange={(e) =>
+                        setNewCargo((p) => ({
+                          ...p,
+                          description: e.target.value,
+                        }))
+                      }
+                      placeholder="Тайлбар"
+                      className="rounded-xl border px-3 py-2 text-sm"
+                    />
                   </div>
                   <div className="flex justify-end gap-2">
-                    <button onClick={() => setShowCargoForm(false)} className="rounded-lg border px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">
+                    <Button
+                      onClick={() => setShowCargoForm(false)}
+                      variant="outline"
+                      size="sm"
+                      className="px-4 py-2 text-sm font-semibold text-slate-700"
+                    >
                       Цуцлах
-                    </button>
-                    <button onClick={handleCreateCargo} disabled={cargoSaving === "new"} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-60">
+                    </Button>
+                    <Button onClick={handleCreateCargo} disabled={cargoSaving === "new"} size="sm" className="px-4 py-2 text-sm font-semibold">
                       {cargoSaving === "new" ? "Нэмж байна..." : "Нэмэх"}
-                    </button>
+                    </Button>
                   </div>
                 </>
               ) : (
-                <button onClick={() => setShowCargoForm(true)} className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                <Button onClick={() => setShowCargoForm(true)} variant="outline" fullWidth className="border-slate-300 bg-white text-slate-700">
                   Карго нэмэх
-                </button>
+                </Button>
               )}
             </div>
             <div className="space-y-3 max-h-[360px] overflow-y-auto pr-1">
               {cargos.map((cargo) => (
-                <div key={cargo._id} className="flex items-center justify-between rounded-2xl border border-slate-200 px-3 py-3">
+                <div
+                  key={cargo._id}
+                  className="flex items-center justify-between rounded-2xl border border-slate-200 px-3 py-3"
+                >
                   <div>
-                    <p className="text-sm font-semibold text-slate-900">{cargo.name}</p>
-                    <p className="text-xs text-slate-500">{cargo.description || "Тайлбар оруулаагүй"}</p>
+                    <p className="text-sm font-semibold text-slate-900">
+                      {cargo.name}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {cargo.description || "Тайлбар оруулаагүй"}
+                    </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button
+                    <Button
                       disabled={cargoSaving === cargo._id}
                       onClick={() => toggleCargo(cargo._id, !cargo.isActive)}
-                      className={`rounded-lg px-3 py-2 text-xs font-semibold ${cargo.isActive ? "bg-emerald-100 text-emerald-700 border border-emerald-200" : "bg-slate-100 text-slate-700 border border-slate-200"}`}
+                      variant="outline"
+                      size="sm"
+                      className={`px-3 py-2 text-xs font-semibold ${
+                        cargo.isActive
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                          : "border-slate-200 bg-slate-50 text-slate-700"
+                      }`}
                     >
-                      {cargoSaving === cargo._id ? "Шинэчилж..." : cargo.isActive ? "Идэвхгүй болгох" : "Идэвхжүүлэх"}
-                    </button>
-                    <button
+                      {cargoSaving === cargo._id
+                        ? "Шинэчилж..."
+                        : cargo.isActive
+                        ? "Идэвхгүй болгох"
+                        : "Идэвхжүүлэх"}
+                    </Button>
+                    <Button
                       disabled={cargoSaving === cargo._id}
                       onClick={() => deleteCargo(cargo._id)}
-                      className="rounded-lg bg-rose-50 text-rose-600 border border-rose-200 px-3 py-2 text-xs font-semibold hover:bg-rose-100 disabled:opacity-60"
+                      variant="danger"
+                      size="sm"
+                      className="px-3 py-2 text-xs font-semibold bg-rose-50 text-rose-600 hover:bg-rose-100"
                     >
                       Устгах
-                    </button>
+                    </Button>
                   </div>
                 </div>
               ))}
-              {cargos.length === 0 && <p className="text-xs text-slate-500">Карго бүртгэл хоосон байна.</p>}
+              {cargos.length === 0 && (
+                <p className="text-xs text-slate-500">
+                  Карго бүртгэл хоосон байна.
+                </p>
+              )}
             </div>
-            <p className="text-xs text-slate-500">Карго жагсаалт идэвхтэй байж байж хэрэглэгч сонгоно.</p>
+            <p className="text-xs text-slate-500">
+              Карго жагсаалт идэвхтэй байж байж хэрэглэгч сонгоно.
+            </p>
           </div>
 
           <div className="rounded-3xl border border-slate-200 bg-white/80 shadow-sm p-5 space-y-4">
@@ -571,21 +821,46 @@ export default function AdminPage() {
               <Pill>{filteredConfirmed.length} захиалга</Pill>
             </div>
             <div className="flex gap-2 text-xs">
-              <input type="date" value={paidFrom} onChange={(e) => setPaidFrom(e.target.value)} className="w-full rounded-lg border px-2 py-2" />
-              <input type="date" value={paidTo} onChange={(e) => setPaidTo(e.target.value)} className="w-full rounded-lg border px-2 py-2" />
+              <input
+                type="date"
+                value={paidFrom}
+                onChange={(e) => setPaidFrom(e.target.value)}
+                className="w-full rounded-lg border px-2 py-2"
+              />
+              <input
+                type="date"
+                value={paidTo}
+                onChange={(e) => setPaidTo(e.target.value)}
+                className="w-full rounded-lg border px-2 py-2"
+              />
             </div>
             <div className="space-y-2 max-h-64 overflow-y-auto pr-1 text-sm">
-              {filteredConfirmed.length === 0 && <p className="text-slate-500">Баталгаажсан төлбөр одоогоор алга.</p>}
+              {filteredConfirmed.length === 0 && (
+                <p className="text-slate-500">
+                  Баталгаажсан төлбөр одоогоор алга.
+                </p>
+              )}
               {filteredConfirmed.map((o) => (
-                <div key={o._id} className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                <div
+                  key={o._id}
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2"
+                >
                   <div className="flex items-center justify-between">
-                    <span className="font-mono text-xs text-slate-600">#{o._id?.slice(-6)}</span>
-                    <span className="text-xs text-slate-500">{formatDate(o.payment?.paidAt || o.updatedAt)}</span>
+                    <span className="font-mono text-xs text-slate-600">
+                      #{o._id?.slice(-6)}
+                    </span>
+                    <span className="text-xs text-slate-500">
+                      {formatDate(o.payment?.paidAt || o.updatedAt)}
+                    </span>
                   </div>
                   <p className="text-sm font-semibold text-slate-900 mt-1">
-                    {o.payment?.amountMnt ? `${Number(o.payment.amountMnt).toLocaleString()} ₮` : "Дүн оруулаагүй"}
+                    {o.payment?.amountMnt
+                      ? `${Number(o.payment.amountMnt).toLocaleString()} ₮`
+                      : "Дүн оруулаагүй"}
                   </p>
-                  <p className="text-xs text-slate-500">{o.cargoId?.name || "Карго сонгоогүй"}</p>
+                  <p className="text-xs text-slate-500">
+                    {o.cargoId?.name || "Карго сонгоогүй"}
+                  </p>
                 </div>
               ))}
             </div>
@@ -599,29 +874,42 @@ export default function AdminPage() {
             <div className="space-y-3">
               <div className="rounded-2xl border border-slate-200 bg-white px-3 py-3">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-semibold">Шинэ агент баталгаажуулах ({pendingAgents.length})</h4>
+                  <h4 className="text-sm font-semibold">
+                    Шинэ агент баталгаажуулах ({pendingAgents.length})
+                  </h4>
                 </div>
                 <div className="mt-2 space-y-2 max-h-48 overflow-y-auto pr-1">
-                  {pendingAgents.length === 0 && <p className="text-xs text-slate-500">Шинэ хүсэлт алга.</p>}
+                  {pendingAgents.length === 0 && (
+                    <p className="text-xs text-slate-500">Шинэ хүсэлт алга.</p>
+                  )}
                   {pendingAgents.map((agent) => (
-                    <div key={agent._id} className="rounded-xl border border-slate-200 px-3 py-2">
-                      <p className="text-sm font-semibold text-slate-900">{agent.userId?.fullName || "Нэргүй"}</p>
-                      <p className="text-xs text-slate-500">{agent.userId?.phone}</p>
+                    <div
+                      key={agent._id}
+                      className="rounded-xl border border-slate-200 px-3 py-2"
+                    >
+                      <p className="text-sm font-semibold text-slate-900">
+                        {agent.userId?.fullName || "Нэргүй"}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {agent.userId?.phone}
+                      </p>
                       <div className="mt-2 flex gap-2">
-                        <button
+                        <Button
                           disabled={!agent.userId?._id || actionId === agent.userId?._id}
                           onClick={() => handleAgentVerify(agent.userId?._id, "verified")}
-                          className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-500 disabled:opacity-60"
+                          size="sm"
                         >
                           Зөвшөөрөх
-                        </button>
-                        <button
+                        </Button>
+                        <Button
                           disabled={!agent.userId?._id || actionId === agent.userId?._id}
                           onClick={() => handleAgentVerify(agent.userId?._id, "rejected")}
-                          className="rounded-lg bg-rose-500 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-400 disabled:opacity-60"
+                          variant="danger"
+                          size="sm"
+                          className="bg-rose-500 hover:bg-rose-400"
                         >
                           Татгалзах
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   ))}
@@ -630,42 +918,83 @@ export default function AdminPage() {
 
               <div className="rounded-2xl border border-slate-200 bg-white px-3 py-3">
                 <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-sm font-semibold">Бүх агент ({agents.length})</h4>
+                  <h4 className="text-sm font-semibold">
+                    Бүх агент ({agents.length})
+                  </h4>
                 </div>
                 <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                   {agents.map((a) => (
-                    <div key={a._id} className="flex items-center justify-between rounded-xl border border-slate-200 px-3 py-2">
+                    <div
+                      key={a._id}
+                      className="flex items-center justify-between rounded-xl border border-slate-200 px-3 py-2"
+                    >
                       <div>
-                        <p className="text-sm font-semibold text-slate-900">{a.userId?.fullName || "Нэргүй"}</p>
-                        <p className="text-xs text-slate-500">{a.userId?.phone}</p>
+                        <p className="text-sm font-semibold text-slate-900">
+                          {a.userId?.fullName || "Нэргүй"}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {a.userId?.phone}
+                        </p>
                         <p className="text-[11px] text-slate-500">
-                          Статус: {a.verificationStatus} • {a.userId?.isActive ? "Идэвхтэй" : "Идэвхгүй"}
+                          Статус: {a.verificationStatus} •{" "}
+                          {a.userId?.isActive ? "Идэвхтэй" : "Идэвхгүй"}
                         </p>
                       </div>
                       <div className="flex gap-2">
-                        <button
+                        <Button
                           disabled={actionId === a.userId?._id}
-                          onClick={() => handleAgentVerify(a.userId._id, a.verificationStatus === "verified" ? "rejected" : "verified")}
-                          className="rounded-lg border px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60"
+                          onClick={() =>
+                            handleAgentVerify(
+                              a.userId._id,
+                              a.verificationStatus === "verified" ? "rejected" : "verified"
+                            )
+                          }
+                          variant="outline"
+                          size="sm"
+                          className="px-3 py-2 text-xs font-semibold text-slate-700"
                         >
                           {a.verificationStatus === "verified" ? "Цуцлах" : "Батлах"}
-                        </button>
-                        <button
+                        </Button>
+                        <Button
                           disabled={actionId === a.userId?._id}
                           onClick={() => handleAgentActive(a.userId._id, !a.userId?.isActive)}
-                          className={`rounded-lg px-3 py-2 text-xs font-semibold ${a.userId?.isActive ? "bg-emerald-100 text-emerald-700 border border-emerald-200" : "bg-slate-100 text-slate-700 border border-slate-200"} disabled:opacity-60`}
+                          variant="outline"
+                          size="sm"
+                          className={`px-3 py-2 text-xs font-semibold ${
+                            a.userId?.isActive
+                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                              : "border-slate-200 bg-slate-50 text-slate-700"
+                          }`}
                         >
                           {a.userId?.isActive ? "Идэвхгүй болгох" : "Идэвхжүүлэх"}
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   ))}
-                  {agents.length === 0 && <p className="text-sm text-slate-500">Агент байхгүй байна.</p>}
+                  {agents.length === 0 && (
+                    <p className="text-sm text-slate-500">
+                      Агент байхгүй байна.
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
           </div>
         </section>
+
+        {/* Logout Button */}
+        <div className="pt-6 border-t border-slate-200">
+          <Button
+            onClick={() => {
+              localStorage.removeItem("token");
+              router.push("/admin/login");
+            }}
+            variant="danger"
+            fullWidth
+          >
+            🚪 Системээс гарах
+          </Button>
+        </div>
       </div>
     </main>
   );

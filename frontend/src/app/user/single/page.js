@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useUI } from "@/app/layout";
 import { api } from "@/lib/api";
+import Button from "@/components/ui/Button";
+import ImageLightbox from "@/components/ImageLightbox";
 
 const appOptionsData = [
   { value: "any", label: "Бүх платформ" },
@@ -33,6 +35,7 @@ export default function SingleOrderPage() {
   const [successId, setSuccessId] = useState("");
   const [savingDefault, setSavingDefault] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [previewImage, setPreviewImage] = useState("");
 
   const mainClass =
     theme === "night"
@@ -167,8 +170,9 @@ export default function SingleOrderPage() {
   };
 
   return (
-    <main className={`${mainClass} min-h-screen`}>
-      <div className={`${widthClass} mx-auto px-4 py-10 space-y-6`}>
+    <>
+      <main className={`${mainClass} min-h-screen`}>
+        <div className={`${widthClass} mx-auto px-4 py-10 space-y-6`}>
         <div className="flex items-center justify-between">
           <div>
             <p className="text-xs opacity-70">Дан захиалга үүсгэх</p>
@@ -204,8 +208,10 @@ export default function SingleOrderPage() {
               <span>
                 Default: {defaultCargoId ? cargos.find((c) => c._id === defaultCargoId)?.name || "сонгоогүй" : "сонгоогүй"}
               </span>
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="sm"
                 disabled={!selectedCargo || savingDefault}
                 onClick={async () => {
                   if (!selectedCargo) return;
@@ -226,7 +232,7 @@ export default function SingleOrderPage() {
                 className="text-emerald-600 hover:underline disabled:opacity-60"
               >
                 {savingDefault ? "Хадгалж..." : "Default болгох"}
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -296,16 +302,34 @@ export default function SingleOrderPage() {
             <label className="text-sm font-medium">Зураг (optional)</label>
             <div className="flex flex-wrap gap-3">
               {images.map((img, idx) => (
-                <div key={idx} className="relative h-20 w-20 rounded-xl overflow-hidden border border-slate-300">
+                <div
+                  key={idx}
+                  className="relative h-20 w-20 rounded-xl overflow-hidden border border-slate-300 cursor-zoom-in"
+                  onClick={() => setPreviewImage(img)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setPreviewImage(img);
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  aria-label="Зураг томруулах"
+                >
                   <img src={img} alt={`preview-${idx}`} className="h-full w-full object-cover" />
-                  <button
+                  <Button
                     type="button"
-                    onClick={() => setImages((prev) => prev.filter((_, i) => i !== idx))}
-                    className="absolute top-1 right-1 h-5 w-5 rounded-full bg-black/60 text-white text-[10px] flex items-center justify-center"
+                    variant="ghost"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setImages((prev) => prev.filter((_, i) => i !== idx));
+                    }}
+                    className="absolute top-1 right-1 h-5 w-5 rounded-full bg-black/60 text-white text-[10px] flex items-center justify-center px-0 py-0"
                     aria-label="Remove image"
                   >
                     ✕
-                  </button>
+                  </Button>
                 </div>
               ))}
               <label className="h-20 w-20 rounded-xl border border-dashed border-slate-300 flex items-center justify-center text-slate-500 cursor-pointer hover:border-emerald-400">
@@ -316,13 +340,9 @@ export default function SingleOrderPage() {
             <p className="text-xs text-slate-500">Зураг оруулбал агент талд илүү ойлгомжтой.</p>
           </div>
 
-          <button
-            type="submit"
-            disabled={loading || submitting}
-            className="w-full rounded-xl bg-emerald-600 py-3 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-70"
-          >
+          <Button type="submit" disabled={loading || submitting} fullWidth size="lg">
             {submitting ? "Илгээж байна..." : "Захиалга илгээх"}
-          </button>
+          </Button>
         </form>
 
         {successId && (
@@ -334,20 +354,24 @@ export default function SingleOrderPage() {
               <Link href={`/user/requests/${successId}`} className="text-emerald-600 hover:underline">
                 Дэлгэрэнгүй харах
               </Link>
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="sm"
+                className="text-slate-600 hover:underline px-0"
                 onClick={() => {
                   setSuccessId("");
                   router.push("/user/requests");
                 }}
-                className="text-slate-600 hover:underline"
               >
                 Жагсаалт руу буцах
-              </button>
+              </Button>
             </div>
           </div>
         )}
-      </div>
-    </main>
+        </div>
+      </main>
+      <ImageLightbox src={previewImage} alt="Захиалгын зураг" onClose={() => setPreviewImage("")} />
+    </>
   );
 }

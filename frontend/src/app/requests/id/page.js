@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useUI } from "../../layout";
+import Button from "@/components/ui/Button";
 
 const MARKET_APP_LABEL = {
   any: "Ямар ч маркет",
@@ -442,13 +443,9 @@ export default function RequestDetailPage({ params }) {
                 <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
                   Төсөв (CNY → MNT): <span className="font-semibold">{totalMnt.toLocaleString()}₮</span>
                 </div>
-                <button
-                  onClick={handlePay}
-                  disabled={paying}
-                  className="mt-5 flex w-full items-center justify-center rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
-                >
+                <Button onClick={handlePay} disabled={paying} fullWidth size="lg" className="mt-5">
                   {paying ? "Төлбөрийг баталгаажуулж байна..." : "Төлбөр баталгаажуулах"}
-                </button>
+                </Button>
               </div>
             )}
           </div>
@@ -467,17 +464,19 @@ export default function RequestDetailPage({ params }) {
               {[0, 1, 2, 3, 4, 5].map((value) => {
                 const active = request.rating === value || rating === value;
                 return (
-                  <button
+                  <Button
                     key={value}
                     onClick={() => handleRating(value)}
                     disabled={ratingSaving}
-                    className={`h-10 w-10 rounded-full border text-sm font-semibold transition ${active
-                      ? "border-indigo-500 bg-indigo-600 text-white shadow-lg"
-                      : "border-slate-200 bg-white text-slate-600 hover:border-indigo-200"
+                    variant={active ? "secondary" : "outline"}
+                    size="sm"
+                    className={`h-10 w-10 rounded-full ${active
+                      ? "bg-indigo-600 border-indigo-500 text-white hover:bg-indigo-500"
+                      : "border-slate-200 text-slate-600 hover:border-indigo-200"
                       }`}
                   >
                     {value}
-                  </button>
+                  </Button>
                 );
               })}
             </div>

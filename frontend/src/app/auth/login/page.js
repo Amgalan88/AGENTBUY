@@ -3,7 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { api } from "@/lib/api";
+import Button from "@/components/ui/Button";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -44,75 +46,91 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-100 text-slate-900 flex items-center justify-center px-4">
-      <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-semibold mb-2">Нэвтрэх</h1>
-        <p className="text-sm text-slate-600 mb-4">
-          Утасны дугаар, нууц үгээ оруулаад нэвтрэнэ үү.
-          {prefRole === "agent" ? " (Агент)" : prefRole === "user" ? " (Хэрэглэгч)" : ""}
-        </p>
+    <main className="page-container flex items-center justify-center px-4 py-responsive min-h-screen">
+      <div className="container-auth w-full animate-fade-in">
+        {/* Back Link */}
+        <Link href="/" className="back-link mb-4 sm:mb-6 inline-flex">
+          ← Нүүр хуудас
+        </Link>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Утасны дугаар
-            </label>
-            <input
-              type="text"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              className="w-full rounded-xl border px-3 py-2 text-sm"
-              placeholder="8800XXXX"
-              required
-            />
+        <div className="surface-card rounded-2xl sm:rounded-3xl p-5 sm:p-8 shadow-lg">
+          {/* Header */}
+          <div className="text-center mb-6 sm:mb-8">
+            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl surface-muted flex items-center justify-center text-2xl sm:text-3xl mx-auto mb-3 sm:mb-4">
+              🔐
+            </div>
+            <h1 className="text-xl sm:text-2xl font-bold">Нэвтрэх</h1>
+            <p className="text-secondary text-xs sm:text-sm mt-2">
+              Утасны дугаар, нууц үгээ оруулаад нэвтрэнэ үү.
+              {prefRole === "agent" && <span className="chip-info ml-2 px-2 py-0.5 rounded-full text-xs">Агент</span>}
+              {prefRole === "user" && <span className="chip-success ml-2 px-2 py-0.5 rounded-full text-xs">Хэрэглэгч</span>}
+            </p>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Нууц үг
-            </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-xl border px-3 py-2 text-sm"
-              placeholder="********"
-              required
-            />
-          </div>
-          <div className="flex items-center justify-between text-xs text-slate-600">
-            <label className="inline-flex items-center gap-2">
+
+          <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
+            <div>
+              <label className="block text-sm font-medium mb-1.5 sm:mb-2">
+                Утасны дугаар
+              </label>
               <input
-                type="checkbox"
-                checked={remember}
-                onChange={(e) => setRemember(e.target.checked)}
-                className="h-4 w-4 rounded border-slate-300"
+                type="tel"
+                inputMode="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="input-field"
+                placeholder="8800XXXX"
+                required
+                autoComplete="tel"
               />
-              Намайг сана
-            </label>
-            <a href="/auth/forgot" className="text-emerald-600 hover:underline">
-              Нууц үг мартсан?
-            </a>
-          </div>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium mb-1.5 sm:mb-2">
+                Нууц үг
+              </label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="input-field"
+                placeholder="••••••••"
+                required
+                autoComplete="current-password"
+              />
+            </div>
+            
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 text-sm">
+              <label className="inline-flex items-center gap-2 cursor-pointer touch-target">
+                <input
+                  type="checkbox"
+                  checked={remember}
+                  onChange={(e) => setRemember(e.target.checked)}
+                  className="w-4 h-4 sm:w-5 sm:h-5 rounded border-[var(--surface-card-border)] text-[var(--accent-primary)]"
+                />
+                <span className="text-secondary">Намайг сана</span>
+              </label>
+              <Link href="/auth/forgot" className="link-primary">
+                Нууц үг мартсан?
+              </Link>
+            </div>
 
-          {error && <p className="text-sm text-rose-600">{error}</p>}
+            {error && <div className="error-box">{error}</div>}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-70"
-          >
-            {loading ? "Түр хүлээнэ үү..." : "Нэвтрэх"}
-          </button>
-        </form>
+            <Button type="submit" loading={loading} fullWidth size="lg" className="touch-target">
+              Нэвтрэх
+            </Button>
+          </form>
 
-        <p className="mt-4 text-sm text-slate-600">
-          Шинэ хэрэглэгч үү?{" "}
-          <a href="/auth/register" className="text-emerald-600 hover:underline">
-            Бүртгүүлэх
-          </a>
-        </p>
+          <div className="divider my-5 sm:my-6" />
+
+          <p className="text-center text-sm text-secondary">
+            Шинэ хэрэглэгч үү?{" "}
+            <Link href="/auth/register" className="link-primary font-medium">
+              Бүртгүүлэх
+            </Link>
+          </p>
+        </div>
       </div>
     </main>
   );
 }
-

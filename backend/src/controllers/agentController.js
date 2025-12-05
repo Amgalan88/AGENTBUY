@@ -1,6 +1,7 @@
 const Order = require("../models/orderModel");
 const { assertTransition, ORDER_STATUS } = require("../services/orderStateService");
 const { getIO } = require("../socket");
+const { normalizeItemImages } = require("../services/cloudinaryService");
 
 const RESEARCH_LOCK_HOURS = 2;
 const TRACK_ALLOWED = [
@@ -99,8 +100,9 @@ async function submitReport(req, res) {
     assertTransition(order.status, ORDER_STATUS.REPORT_SUBMITTED, "agent");
 
     const { items = [], pricing = {}, paymentLink } = req.body;
+    const normalizedItems = await normalizeItemImages(items);
     order.report = {
-      items,
+      items: normalizedItems,
       pricing,
       paymentLink,
       submittedAt: new Date(),
@@ -143,6 +145,38 @@ async function updateTracking(req, res) {
   }
 }
 
+async function addAgentComment(req, res) {
+  try {
+    const order = await Order.findById(req.params.id);
+    if (!order) return res.status(404).json({ message: "Захиалга олдсонгүй" });
+    if (!order.agentId?.equals(req.user._id)) {
+      return res.status(403).json({ message: "Энэ захиалга таны биш" });
+    }
+
+    const { message } = req.body;
+    if (!message || !message.trim()) {
+      return res.status(400).json({ message: "Сэтгэгдэл хоосон байж болохгүй" });
+    }
+
+    order.comments = order.comments || [];
+    order.comments.push({
+      senderId: req.user._id,
+      senderRole: "agent",
+      message: message.trim(),
+    });
+    await order.save();
+
+    try {
+      getIO().emit("order:comment", { orderId: order._id, role: "agent" });
+    } catch (e) {}
+
+    res.json(order);
+  } catch (err) {
+    console.error("addAgentComment error", err);
+    res.status(500).json({ message: "Серверийн алдаа" });
+  }
+}
+
 module.exports = {
   listAvailable,
   getOrder,
@@ -151,4 +185,5 @@ module.exports = {
   startResearch,
   submitReport,
   updateTracking,
+  addAgentComment,
 };

@@ -87,6 +87,14 @@ const orderSchema = new mongoose.Schema(
       agentComment: { type: String },
       submittedAt: { type: Date },
     },
+    comments: [
+      {
+        senderId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+        senderRole: { type: String, enum: ["user", "agent"] },
+        message: { type: String, required: true },
+        createdAt: { type: Date, default: Date.now },
+      },
+    ],
     ratingByUser: {
       score: { type: Number },
       comment: { type: String },
@@ -98,5 +106,12 @@ const orderSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// Performance indexes
+orderSchema.index({ userId: 1, status: 1 });
+orderSchema.index({ agentId: 1, status: 1 });
+orderSchema.index({ status: 1, createdAt: -1 });
+orderSchema.index({ "lock.expiresAt": 1 });
+orderSchema.index({ createdAt: -1 });
 
 module.exports = mongoose.model("Order", orderSchema);

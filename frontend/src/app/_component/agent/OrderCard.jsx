@@ -3,6 +3,7 @@
 
 import Link from "next/link";
 import { useUI } from "@/app/layout";
+import Button from "@/components/ui/Button";
 
 const appLabel = {
     taobao: "Taobao",
@@ -69,12 +70,12 @@ export default function OrderCard({ order }) {
 
             {/* Үйлдлүүд */}
             <div className="flex items-center justify-between gap-2">
-                <button className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-medium text-white hover:bg-slate-800 transition">
+                <Button variant="secondary" size="sm">
                     Судлах
-                </button>
-                <button className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-medium text-white hover:bg-emerald-500 transition">
+                </Button>
+                <Button size="sm">
                     Санал илгээх
-                </button>
+                </Button>
 
                 <Link
                     href={`/requests/${order.rawId}`}

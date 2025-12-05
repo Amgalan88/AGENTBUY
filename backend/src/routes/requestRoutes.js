@@ -2,6 +2,7 @@
 const express = require("express");
 const Request = require("../models/requestModel");
 const { Types } = require("mongoose");
+const { normalizeItemImages, uploadImage } = require("../services/cloudinaryService");
 
 const loadRequest = async (id) => {
     if (!Types.ObjectId.isValid(id)) {
@@ -22,9 +23,11 @@ router.post("/", async (req, res) => {
             return res.status(400).json({ message: "type, items are required" });
         }
 
+        const normalizedItems = await normalizeItemImages(items);
+
         const newRequest = await Request.create({
             type,
-            items,
+            items: normalizedItems,
             urgency: urgency || "normal",
             status: "new",
         });
@@ -108,12 +111,13 @@ router.post("/:id/report", async (req, res) => {
         }
 
         const { priceCny, note, link, paymentLink, image } = req.body;
+        const uploadedImage = await uploadImage(image);
         request.report = {
             priceCny,
             note,
             link,
             paymentLink,
-            image,
+            image: uploadedImage,
             submittedAt: new Date(),
         };
         request.status = "proposal_sent";

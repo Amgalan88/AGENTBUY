@@ -4,6 +4,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useUI } from "@/app/layout";
+import Button from "@/components/ui/Button";
 
 const urgencyConfig = {
     urgent: { label: "Яаралтай", className: "bg-red-500/10 text-red-600" },
@@ -126,19 +127,19 @@ export default function OrderCard({ order }) {
 
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div className="flex items-center gap-2">
-                    <button
+                    <Button
                         onClick={handleClaim}
                         disabled={lockInfo || claiming}
-                        className={`rounded-xl px-4 py-2 text-xs font-medium text-white transition ${lockInfo
-                            ? "bg-slate-400 cursor-not-allowed"
-                            : "bg-emerald-600 hover:bg-emerald-500"
-                            }`}
+                        variant={lockInfo ? "muted" : "primary"}
+                        size="sm"
                         title={lockInfo ? "Өөр агент судалж байна" : "Захиалга авах"}
                     >
                         {claiming ? "Авч байна..." : lockInfo ? "Түгжээтэй" : "Захиалга авах"}
-                    </button>
-                    <Link href={`/agent/order/${order.rawId}`} className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-medium text-white hover:bg-slate-800 transition">
+                    </Button>
+                    <Link href={`/agent/order/${order.rawId}`} className="inline-flex">
+                        <Button variant="secondary" size="sm">
                         Дэлгэрэнгүй
+                        </Button>
                     </Link>
                 </div>
                 <div className="flex-1 md:flex md:items-center md:justify-end">

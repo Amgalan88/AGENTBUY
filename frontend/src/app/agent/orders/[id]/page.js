@@ -3,32 +3,24 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useUI } from "../../../layout";
 import { api } from "@/lib/api";
+import Button from "@/components/ui/Button";
+import ImageLightbox from "@/components/ImageLightbox";
 
-const statusLabel = {
-  PUBLISHED: "Нээлттэй",
-  AGENT_LOCKED: "Түгжсэн",
-  AGENT_RESEARCHING: "Судалж байна",
-  REPORT_SUBMITTED: "Тайлан илгээгдсэн",
-  WAITING_USER_REVIEW: "Хэрэглэгчийн шийдвэр",
-  WAITING_PAYMENT: "Төлбөр хүлээж байна",
-  COMPLETED: "Амжилттай хаасан",
-};
-
-const appIcon = {
-  taobao: "/marketplace/taobao.png",
-  pinduoduo: "/marketplace/pinduoudo.png",
-  "1688": "/marketplace/1688.jpg",
-  dewu: "/marketplace/poizon.png",
-  any: "/marketplace/taobao.png",
+const STATUS_CONFIG = {
+  PUBLISHED: { label: "Нээлттэй", color: "chip-info" },
+  AGENT_LOCKED: { label: "Түгжсэн", color: "chip-warning" },
+  AGENT_RESEARCHING: { label: "Судалж байна", color: "chip-info" },
+  REPORT_SUBMITTED: { label: "Тайлан илгээсэн", color: "chip-success" },
+  WAITING_USER_REVIEW: { label: "Хэрэглэгчийн шийдвэр", color: "chip-warning" },
+  WAITING_PAYMENT: { label: "Төлбөр хүлээж", color: "chip-warning" },
+  COMPLETED: { label: "Дууссан", color: "chip-success" },
 };
 
 const formatDate = (value) =>
   value
     ? new Intl.DateTimeFormat("mn", {
-        year: "numeric",
-        month: "2-digit",
+        month: "short",
         day: "2-digit",
         hour: "2-digit",
         minute: "2-digit",
@@ -36,7 +28,6 @@ const formatDate = (value) =>
     : "-";
 
 export default function AgentOrderDetailPage() {
-  const { theme, view } = useUI();
   const { id } = useParams();
   const router = useRouter();
 
@@ -47,27 +38,7 @@ export default function AgentOrderDetailPage() {
   const [paymentLink, setPaymentLink] = useState("");
   const [reportDraft, setReportDraft] = useState([]);
   const [trackingCode, setTrackingCode] = useState("");
-
-  const mainClass =
-    theme === "night"
-      ? "bg-slate-950 text-slate-50"
-      : theme === "mid"
-        ? "bg-slate-200 text-slate-900"
-        : "bg-slate-100 text-slate-900";
-
-  const cardClass =
-    theme === "night"
-      ? "bg-slate-900/80 border-slate-700"
-      : theme === "mid"
-        ? "bg-slate-100 border-slate-300"
-        : "bg-white border-slate-200";
-
-  const widthClass =
-    view === "mobile"
-      ? "max-w-md"
-      : view === "tablet"
-        ? "max-w-3xl"
-        : "max-w-5xl";
+  const [previewImage, setPreviewImage] = useState("");
 
   const mappedItems = useMemo(() => {
     if (!order?.items) return [];
@@ -97,15 +68,13 @@ export default function AgentOrderDetailPage() {
         setTrackingCode(data.tracking?.code || "");
       } catch (err) {
         if (!alive) return;
-        setError(err.message || "Захиалга уншихад алдаа гарлаа");
+        setError(err.message || "Захиалга уншихад алдаа");
       } finally {
         if (alive) setLoading(false);
       }
     }
     if (id) load();
-    return () => {
-      alive = false;
-    };
+    return () => { alive = false; };
   }, [id]);
 
   const doAction = async (path, body) => {
@@ -162,14 +131,10 @@ export default function AgentOrderDetailPage() {
         sourceUrl: it.sourceUrl,
       };
     });
-
     const grandTotal = draftedItems.reduce((s, it) => s + (it.agentTotal || 0), 0);
-
     doAction(`/api/agent/orders/${order._id}/report`, {
       items: draftedItems,
-      pricing: {
-        grandTotalCny: grandTotal,
-      },
+      pricing: { grandTotalCny: grandTotal },
       paymentLink: paymentLink || undefined,
     });
   };
@@ -177,415 +142,252 @@ export default function AgentOrderDetailPage() {
   const status = order?.status;
   const totalQty = order?.items?.reduce((s, it) => s + (it.quantity || 0), 0) || 0;
   const reportTotalCny = order?.report?.pricing?.grandTotalCny;
-  const reportImagesPreview =
-    (order?.report?.items || [])
-      .flatMap((it) => (it.images || (it.imageUrl ? [it.imageUrl] : [])).slice(0, 3))
-      .slice(0, 3);
+  const canTrack = ["ORDER_PLACED", "CARGO_IN_TRANSIT", "ARRIVED_AT_CARGO", "COMPLETED"].includes(status);
+  const statusConfig = STATUS_CONFIG[status] || { label: status, color: "chip" };
 
   if (loading) {
     return (
-      <main className={`${mainClass} min-h-screen flex items-center justify-center`}>
-        <p className="text-sm text-slate-500">Ачааллаж байна...</p>
+      <main className="page-container flex items-center justify-center min-h-screen">
+        <div className="space-y-3 text-center">
+          <div className="skeleton w-16 h-16 rounded-full mx-auto" />
+          <p className="text-sm text-muted">Ачааллаж байна...</p>
+        </div>
       </main>
     );
   }
 
   if (!order) {
     return (
-      <main className={`${mainClass} min-h-screen flex items-center justify-center`}>
-        <div className="text-center space-y-2">
-          <p className="text-sm text-rose-600">{error || "Захиалга олдсонгүй"}</p>
-          <Link href="/agent" className="text-sm text-emerald-600 hover:underline">
-            Буцах
-          </Link>
+      <main className="page-container flex items-center justify-center min-h-screen">
+        <div className="text-center space-y-3">
+          <p className="text-3xl">📭</p>
+          <p className="text-[var(--accent-danger)]">{error || "Захиалга олдсонгүй"}</p>
+          <Link href="/agent" className="link-primary text-sm">← Буцах</Link>
         </div>
       </main>
     );
   }
 
-  const firstApp = order.items?.[0]?.app;
-  const platformIcon = appIcon[firstApp] || appIcon.any;
-  const canTrack = ["ORDER_PLACED", "CARGO_IN_TRANSIT", "ARRIVED_AT_CARGO", "COMPLETED"].includes(status);
-
   return (
-    <main className={`${mainClass} min-h-screen`}>
-      <div className={`${widthClass} mx-auto px-4 py-10 space-y-6`}>
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xs opacity-70">Агент захиалга</p>
-            <h1 className="text-2xl font-semibold flex items-center gap-2">
-              #{order._id?.slice(-6)}
-              <img src={platformIcon} alt="app" className="h-6 w-6 rounded" />
-            </h1>
-            <p className="text-xs text-slate-500">Карго: {order.cargoId?.name || "Сонгогдоогүй"}</p>
-          </div>
-          <button className="text-sm opacity-70 hover:text-emerald-600" onClick={() => router.back()}>
-            ← Буцах
-          </button>
-        </div>
-
-        {error && (
-          <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-600">
-            {error}
-          </div>
-        )}
-
-        <section className={`rounded-3xl border px-5 py-5 ${cardClass}`}>
-          <div className="flex items-center justify-between text-sm text-slate-600">
-            <span>
-              Статус: <strong>{statusLabel[status] || status}</strong>
-            </span>
-            <span>Үүсгэсэн: {formatDate(order.createdAt)}</span>
-          </div>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <span className="text-xs text-slate-500">Нийт бараа: {order.items?.length || 0}</span>
-            <span className="text-xs text-slate-500">Тоо хэмжээ: {totalQty}</span>
-          </div>
-        </section>
-
-        <section className="grid gap-6 lg:grid-cols-[1.6fr,1fr]">
-          <div className="space-y-5">
-            <div className={`rounded-3xl border px-5 py-5 ${cardClass}`}>
-              <div className="flex items-center justify-between gap-2">
-                <h3 className="text-lg font-semibold text-slate-900">Хэрэглэгчийн оруулсан бараа</h3>
-                <span className="text-xs text-slate-500">{order.items?.length || 0} мөр</span>
-              </div>
-              <div className="mt-4 space-y-3">
-                {mappedItems.map((item, idx) => (
-                  <article
-                    key={`${item.title}-${idx}`}
-                    className="rounded-2xl border border-slate-200 bg-white/70 px-4 py-4 shadow-sm"
-                  >
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="space-y-1">
-                        <p className="text-sm font-semibold text-slate-900">
-                          #{idx + 1} {item.title || "Бараа"}
-                        </p>
-                        <p className="text-xs text-slate-600">Тоо: {item.quantity || 1}</p>
-                        {item.userNotes && (
-                          <p className="text-xs text-slate-600">Тэмдэглэл: {item.userNotes}</p>
-                        )}
-                        {item.sourceUrl && (
-                          <a
-                            href={item.sourceUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-xs font-semibold text-emerald-600 underline"
-                          >
-                            Барааны холбоос
-                          </a>
-                        )}
-                      </div>
-                      {item.images?.length > 0 && (
-                        <div className="flex items-center gap-2">
-                          {item.images.slice(0, 3).map((img, imgIdx) => (
-                            <div
-                              key={imgIdx}
-                              className="h-16 w-20 overflow-hidden rounded-lg border border-slate-200 bg-slate-50"
-                            >
-                              <img src={img} alt={item.title} className="h-full w-full object-cover" />
-                            </div>
-                          ))}
-                          {item.images.length > 3 && (
-                            <span className="text-[11px] text-slate-500">+{item.images.length - 3} зураг</span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </article>
-                ))}
-              </div>
+    <>
+      <main className="page-container">
+        <div className="container-responsive py-responsive space-y-4 sm:space-y-6">
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <button onClick={() => router.back()} className="back-link mb-2">← Буцах</button>
+              <h1 className="page-title flex items-center gap-2">
+                #{order._id?.slice(-6)}
+                <span className={`status-badge ${statusConfig.color}`}>{statusConfig.label}</span>
+              </h1>
+              <p className="page-subtitle">Карго: {order.cargoId?.name || "Сонгоогүй"} • {formatDate(order.createdAt)}</p>
             </div>
+          </div>
 
-            {status === "AGENT_RESEARCHING" && (
-              <div className={`rounded-3xl border px-5 py-5 ${cardClass}`}>
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-semibold text-slate-900">Тайлан бэлтгэх</h3>
-                  <span className="text-xs text-slate-500">Бүх үнэ CNY</span>
+          {error && <div className="error-box">{error}</div>}
+
+          {/* Main Grid */}
+          <div className="grid gap-4 sm:gap-6 lg:grid-cols-[1.6fr,1fr]">
+            {/* Left Column */}
+            <div className="space-y-4 sm:space-y-6">
+              {/* Items Card */}
+              <section className="surface-card rounded-xl sm:rounded-2xl card-padding">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold">Хэрэглэгчийн бараа</h3>
+                  <span className="chip">{order.items?.length || 0} мөр • {totalQty} ширхэг</span>
                 </div>
-                <div className="mt-4 space-y-3">
-                  <label className="text-sm font-medium text-slate-700">Төлбөрийн холбоос</label>
-                  <input
-                    type="url"
-                    value={paymentLink}
-                    onChange={(e) => setPaymentLink(e.target.value)}
-                    className="w-full rounded-xl border px-3 py-2 text-sm"
-                    placeholder="https://pay.example.com/invoice"
-                  />
-                </div>
-                <div className="mt-5 space-y-4">
-                  {mappedItems.map((item, idx) => {
-                    const draft = reportDraft[idx] || {};
-                    return (
-                      <div key={idx} className="rounded-2xl border border-slate-200 bg-white/70 px-4 py-4 shadow-sm">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="space-y-1">
-                            <p className="text-sm font-semibold text-slate-900">
-                              #{idx + 1} {item.title || "Бараа"}
-                            </p>
-                            <p className="text-xs text-slate-600">Тоо: {item.quantity || 1}</p>
-                          </div>
-                          {item.images?.[0] && (
-                            <div className="h-16 w-20 overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
-                              <img src={item.images[0]} alt={item.title} className="h-full w-full object-cover" />
-                            </div>
+                <div className="space-y-3">
+                  {mappedItems.map((item, idx) => (
+                    <article key={idx} className="surface-muted rounded-xl p-3 sm:p-4">
+                      <div className="flex flex-col sm:flex-row sm:items-start gap-3">
+                        <div className="flex-1 min-w-0 space-y-1">
+                          <p className="font-semibold text-sm">#{idx + 1} {item.title || "Бараа"}</p>
+                          <p className="text-xs text-secondary">Тоо: {item.quantity || 1}</p>
+                          {item.userNotes && <p className="text-xs text-secondary">📝 {item.userNotes}</p>}
+                          {item.sourceUrl && (
+                            <a href={item.sourceUrl} target="_blank" rel="noreferrer" className="link-primary text-xs">
+                              🔗 Холбоос
+                            </a>
                           )}
                         </div>
-                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                          <label className="text-xs font-medium text-slate-600 flex flex-col gap-2">
-                            Нэгж үнэ (CNY)
-                            <input
-                              type="number"
-                              value={draft.price}
-                              onChange={(e) =>
-                                setReportDraft((prev) =>
-                                  prev.map((d, i) => (i === idx ? { ...d, price: e.target.value } : d))
-                                )
-                              }
-                              className="rounded-xl border px-3 py-2 text-sm"
-                              placeholder="Жишээ: 80"
-                            />
-                          </label>
-                          <label className="text-xs font-medium text-slate-600 flex flex-col gap-2">
-                            Тайлбар
-                            <input
-                              type="text"
-                              value={draft.note || ""}
-                              onChange={(e) =>
-                                setReportDraft((prev) =>
-                                  prev.map((d, i) => (i === idx ? { ...d, note: e.target.value } : d))
-                                )
-                              }
-                              className="rounded-xl border px-3 py-2 text-sm"
-                              placeholder="Хэмжээ, материал, загвар..."
-                            />
-                          </label>
-                        </div>
-                        <div className="mt-3">
-                          <p className="text-xs font-medium text-slate-600 mb-2">Зураг (татаж оруулах)</p>
-                          <div className="flex flex-wrap gap-3">
-                            {(draft.images || []).map((img, imgIdx) => (
+                        {item.images?.length > 0 && (
+                          <div className="flex gap-2 flex-wrap">
+                            {item.images.slice(0, 3).map((img, imgIdx) => (
                               <div
                                 key={imgIdx}
-                                className="relative h-16 w-16 overflow-hidden rounded-xl border border-slate-200 bg-slate-50"
+                                className="w-14 h-14 sm:w-16 sm:h-16 rounded-lg overflow-hidden surface-card cursor-pointer"
+                                onClick={() => setPreviewImage(img)}
                               >
-                                <img src={img} alt={`draft-${idx}-${imgIdx}`} className="h-full w-full object-cover" />
-                                <button
-                                  onClick={() =>
-                                    setReportDraft((prev) =>
-                                      prev.map((d, i) =>
-                                        i === idx
-                                          ? { ...d, images: (d.images || []).filter((_, ii) => ii !== imgIdx) }
-                                          : d
-                                      )
-                                    )
-                                  }
-                                  className="absolute top-1 right-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white text-[10px]"
-                                >
-                                  ✕
-                                </button>
+                                <img src={img} alt={item.title} className="img-cover" />
                               </div>
                             ))}
-                            <label className="h-16 w-16 rounded-xl border border-dashed border-slate-300 flex items-center justify-center text-slate-500 cursor-pointer hover:border-emerald-400">
-                              <span className="text-lg">＋</span>
-                              <input
-                                type="file"
-                                accept="image/*"
-                                className="hidden"
-                                onChange={(e) => {
-                                  const file = e.target.files?.[0];
-                                  if (!file) return;
-                                  const reader = new FileReader();
-                                  reader.onload = () => {
-                                    setReportDraft((prev) =>
-                                      prev.map((d, i) =>
-                                        i === idx ? { ...d, images: [...(d.images || []), reader.result] } : d
-                                      )
-                                    );
-                                  };
-                                  reader.readAsDataURL(file);
-                                  e.target.value = "";
-                                }}
-                              />
-                            </label>
                           </div>
-                        </div>
+                        )}
                       </div>
-                    );
-                  })}
+                    </article>
+                  ))}
                 </div>
-                <div className="mt-5">
-                  <button
-                    disabled={actionLoading}
-                    onClick={handleReport}
-                    className="w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-70"
-                  >
-                    {actionLoading ? "Илгээж байна..." : "Тайлан илгээх"}
-                  </button>
-                </div>
-              </div>
-            )}
+              </section>
 
-            {order.report && (
-              <div className={`rounded-3xl border px-5 py-5 ${cardClass}`}>
-                <div className="flex items-center justify-between gap-2">
-                  <h3 className="text-lg font-semibold text-slate-900">Илгээсэн тайлан</h3>
-                  <span className="text-xs text-slate-500">{formatDate(order.report.submittedAt)}</span>
-                </div>
-                <div className="mt-3 grid gap-3 md:grid-cols-2">
-                  <div className="rounded-2xl border border-slate-200 bg-white/60 px-4 py-3">
-                    <p className="text-xs text-slate-500">Нийт дүн</p>
-                    <p className="text-lg font-semibold text-slate-900">{reportTotalCny || "-"} CNY</p>
+              {/* Report Form */}
+              {status === "AGENT_RESEARCHING" && (
+                <section className="surface-card rounded-xl sm:rounded-2xl card-padding">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-semibold">Тайлан бэлтгэх</h3>
+                    <span className="chip">CNY</span>
                   </div>
-                  <div className="rounded-2xl border border-slate-200 bg-white/60 px-4 py-3">
-                    <p className="text-xs text-slate-500">Төлбөрийн холбоос</p>
-                    {order.report.paymentLink ? (
-                      <a
-                        href={order.report.paymentLink}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-sm font-semibold text-emerald-600 underline"
-                      >
-                        {order.report.paymentLink}
-                      </a>
-                    ) : (
-                      <p className="text-sm text-slate-600">Оруулаагүй байна</p>
-                    )}
-                  </div>
-                </div>
-                <div className="mt-4 space-y-3">
-                  {(order.report.items || []).map((rItem, idx) => {
-                    const imgs = (rItem.images || (rItem.imageUrl ? [rItem.imageUrl] : [])).slice(0, 3);
-                    return (
-                      <div key={idx} className="rounded-2xl border border-slate-200 bg-white/70 px-4 py-3 shadow-sm">
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                          <div className="space-y-1">
-                            <p className="text-sm font-semibold text-slate-900">
-                              #{idx + 1} {rItem.title || "Бараа"}
-                            </p>
-                            <p className="text-xs text-slate-600">
-                              Нэгж: {rItem.agentPrice || "-"} {rItem.agentCurrency || "CNY"} × {rItem.quantity || 1}
-                            </p>
-                            <p className="text-xs font-semibold text-slate-800">
-                              Нийт: {rItem.agentTotal ?? "-"} CNY
-                            </p>
-                            {rItem.note && <p className="text-xs text-slate-600">Тайлбар: {rItem.note}</p>}
-                            {rItem.sourceUrl && (
-                              <a
-                                href={rItem.sourceUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-xs font-semibold text-emerald-600 underline"
-                              >
-                                Барааны холбоос
-                              </a>
-                            )}
-                          </div>
-                          {imgs?.length > 0 && (
-                            <div className="flex items-center gap-2">
-                              {imgs.map((img, imgIdx) => (
-                                <div
-                                  key={imgIdx}
-                                  className="h-16 w-16 overflow-hidden rounded-lg border border-slate-200 bg-slate-50"
-                                >
-                                  <img src={img} alt={`report-${idx}-${imgIdx}`} className="h-full w-full object-cover" />
-                                </div>
-                              ))}
-                              {rItem.images?.length > 3 && (
-                                <span className="text-[11px] text-slate-500">+{rItem.images.length - 3} зураг</span>
-                              )}
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium mb-1.5">Төлбөрийн холбоос</label>
+                      <input
+                        type="url"
+                        value={paymentLink}
+                        onChange={(e) => setPaymentLink(e.target.value)}
+                        className="input-field"
+                        placeholder="https://pay.example.com"
+                      />
+                    </div>
+                    {mappedItems.map((item, idx) => {
+                      const draft = reportDraft[idx] || {};
+                      return (
+                        <div key={idx} className="surface-muted rounded-xl p-3 sm:p-4">
+                          <p className="font-semibold text-sm mb-3">#{idx + 1} {item.title}</p>
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <div>
+                              <label className="block text-xs text-secondary mb-1">Нэгж үнэ (CNY)</label>
+                              <input
+                                type="number"
+                                value={draft.price}
+                                onChange={(e) =>
+                                  setReportDraft((prev) =>
+                                    prev.map((d, i) => (i === idx ? { ...d, price: e.target.value } : d))
+                                  )
+                                }
+                                className="input-field"
+                                placeholder="80"
+                              />
                             </div>
-                          )}
+                            <div>
+                              <label className="block text-xs text-secondary mb-1">Тайлбар</label>
+                              <input
+                                type="text"
+                                value={draft.note || ""}
+                                onChange={(e) =>
+                                  setReportDraft((prev) =>
+                                    prev.map((d, i) => (i === idx ? { ...d, note: e.target.value } : d))
+                                  )
+                                }
+                                className="input-field"
+                                placeholder="Хэмжээ, материал..."
+                              />
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                {reportImagesPreview.length > 0 && (
-                  <div className="mt-4 flex gap-2">
-                    {reportImagesPreview.map((img, idx) => (
-                      <div
-                        key={idx}
-                        className="h-14 w-14 overflow-hidden rounded-lg border border-slate-200 bg-slate-50"
-                      >
-                        <img src={img} alt={`preview-${idx}`} className="h-full w-full object-cover" />
+                      );
+                    })}
+                  </div>
+                  <Button onClick={handleReport} loading={actionLoading} fullWidth size="lg" className="mt-4 touch-target">
+                    Тайлан илгээх
+                  </Button>
+                </section>
+              )}
+
+              {/* Submitted Report */}
+              {order.report && (
+                <section className="surface-card rounded-xl sm:rounded-2xl card-padding">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-semibold">Илгээсэн тайлан</h3>
+                    <span className="text-xs text-muted">{formatDate(order.report.submittedAt)}</span>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2 mb-4">
+                    <div className="surface-muted rounded-xl p-3">
+                      <p className="text-xs text-muted">Нийт дүн</p>
+                      <p className="text-lg font-semibold">{reportTotalCny || "-"} CNY</p>
+                    </div>
+                    <div className="surface-muted rounded-xl p-3">
+                      <p className="text-xs text-muted">Төлбөрийн холбоос</p>
+                      {order.report.paymentLink ? (
+                        <a href={order.report.paymentLink} target="_blank" rel="noreferrer" className="link-primary text-sm line-clamp-1">
+                          {order.report.paymentLink}
+                        </a>
+                      ) : (
+                        <p className="text-sm text-secondary">Оруулаагүй</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    {(order.report.items || []).map((rItem, idx) => (
+                      <div key={idx} className="surface-muted rounded-xl p-3 flex justify-between items-center">
+                        <div>
+                          <p className="text-sm font-medium">#{idx + 1} {rItem.title}</p>
+                          <p className="text-xs text-secondary">{rItem.agentPrice} × {rItem.quantity} = {rItem.agentTotal} CNY</p>
+                        </div>
                       </div>
                     ))}
                   </div>
+                </section>
+              )}
+            </div>
+
+            {/* Right Column - Actions */}
+            <div className="space-y-4 sm:space-y-6">
+              {/* Action Card */}
+              <section className="surface-card rounded-xl sm:rounded-2xl card-padding">
+                <h3 className="font-semibold mb-4">Үйлдэл</h3>
+                {status === "PUBLISHED" && (
+                  <Button onClick={() => doAction(`/api/agent/orders/${order._id}/lock`)} loading={actionLoading} fullWidth size="lg" className="touch-target">
+                    🔒 Захиалгыг түгжих
+                  </Button>
                 )}
-              </div>
-            )}
-          </div>
+                {status === "AGENT_LOCKED" && (
+                  <Button onClick={handleStart} loading={actionLoading} fullWidth size="lg" className="touch-target">
+                    ▶️ Судалгаа эхлүүлэх
+                  </Button>
+                )}
+                {status === "AGENT_RESEARCHING" && (
+                  <p className="text-sm text-secondary">Бүх бараанд үнэ оруулаад "Тайлан илгээх" дарна.</p>
+                )}
+                {status === "WAITING_USER_REVIEW" && (
+                  <p className="text-sm text-secondary">Хэрэглэгч шийдвэрлэхийг хүлээж байна.</p>
+                )}
+              </section>
 
-          <div className="space-y-5">
-            <div className={`rounded-3xl border px-5 py-5 ${cardClass}`}>
-              <h3 className="text-base font-semibold text-slate-900 mb-3">Үйлдэл</h3>
-              {status === "PUBLISHED" && (
-                <button
-                  disabled={actionLoading}
-                  onClick={() => doAction(`/api/agent/orders/${order._id}/lock`)}
-                  className="w-full rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-70"
-                >
-                  {actionLoading ? "Түгжиж байна..." : "Захиалгыг түгжих"}
-                </button>
+              {/* Tracking Card */}
+              {canTrack && (
+                <section className="surface-card rounded-xl sm:rounded-2xl card-padding">
+                  <h3 className="font-semibold mb-4">Tracking код</h3>
+                  <div className="space-y-3">
+                    <input
+                      type="text"
+                      value={trackingCode}
+                      onChange={(e) => setTrackingCode(e.target.value)}
+                      placeholder="TRK код"
+                      className="input-field"
+                    />
+                    <Button onClick={saveTracking} loading={actionLoading} variant="secondary" fullWidth className="touch-target">
+                      Хадгалах
+                    </Button>
+                    {order.tracking?.code && (
+                      <p className="text-xs text-muted">Сүүлд: {order.tracking.code}</p>
+                    )}
+                  </div>
+                </section>
               )}
-              {status === "AGENT_LOCKED" && (
-                <button
-                  disabled={actionLoading}
-                  onClick={handleStart}
-                  className="w-full rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-70"
-                >
-                  {actionLoading ? "Эхлүүлж байна..." : "Судалгаа эхлүүлэх"}
-                </button>
-              )}
-              {status === "AGENT_RESEARCHING" && (
-                <p className="text-sm text-slate-600">
-                  Бүх бараанд үнэ, зураг, товч тайлбар оруулаад доорх “Тайлан илгээх”-ийг дарна.
-                </p>
-              )}
-              {status === "WAITING_USER_REVIEW" && (
-                <p className="text-sm text-slate-600">
-                  Хэрэглэгч шийдвэрлэхийг хүлээж байна. Шинэчлэх шаардлагатай бол хэрэглэгчтэй чатлана уу.
-                </p>
-              )}
-            </div>
 
-            {canTrack && (
-              <div className={`rounded-3xl border px-5 py-5 ${cardClass}`}>
-                <h3 className="text-base font-semibold text-slate-900 mb-3">Tracking код</h3>
-                <div className="flex flex-col gap-2 text-sm text-slate-700">
-                  <input
-                    type="text"
-                    value={trackingCode}
-                    onChange={(e) => setTrackingCode(e.target.value)}
-                    placeholder="TRK код"
-                    className="rounded-xl border px-3 py-2"
-                  />
-                  <button
-                    disabled={actionLoading}
-                    onClick={saveTracking}
-                    className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
-                  >
-                    {actionLoading ? "Хадгалж байна..." : "Хадгалах"}
-                  </button>
-                  {order.tracking?.code && (
-                    <p className="text-xs text-slate-500">Сүүлд: {order.tracking.code}</p>
-                  )}
+              {/* Info Card */}
+              <section className="surface-card rounded-xl sm:rounded-2xl card-padding">
+                <h3 className="font-semibold mb-4">Мэдээлэл</h3>
+                <div className="space-y-2 text-sm text-secondary">
+                  <p>📅 Үүсгэсэн: {formatDate(order.createdAt)}</p>
+                  <p>🔄 Шинэчилсэн: {formatDate(order.updatedAt)}</p>
+                  <p>🚚 Карго: {order.cargoId?.name || "Сонгоогүй"}</p>
                 </div>
-              </div>
-            )}
-
-            <div className={`rounded-3xl border px-5 py-5 ${cardClass}`}>
-              <h3 className="text-base font-semibold text-slate-900 mb-3">Товч мэдээлэл</h3>
-              <div className="space-y-2 text-sm text-slate-700">
-                <p>Үүсгэсэн: {formatDate(order.createdAt)}</p>
-                <p>Сүүлд шинэчилсэн: {formatDate(order.updatedAt)}</p>
-                <p>Карго: {order.cargoId?.name || "Сонгогдоогүй"}</p>
-              </div>
+              </section>
             </div>
           </div>
-        </section>
-      </div>
-    </main>
+        </div>
+      </main>
+      <ImageLightbox src={previewImage} alt="Зураг" onClose={() => setPreviewImage("")} />
+    </>
   );
 }

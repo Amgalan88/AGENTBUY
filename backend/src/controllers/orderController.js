@@ -3,6 +3,7 @@ const Cargo = require("../models/cargoModel");
 const { assertTransition, ORDER_STATUS } = require("../services/orderStateService");
 const { consumeOnPublish, returnOnCancel, completeBonus } = require("../services/cardService");
 const { getIO } = require("../socket");
+const { normalizeItemImages } = require("../services/cloudinaryService");
 
 const ERR_NOT_FOUND = { message: "Захиалга олдсонгүй" };
 
@@ -20,11 +21,13 @@ async function createDraft(req, res) {
       return res.status(400).json({ message: "Карго олдсонгүй" });
     }
 
+    const normalizedItems = await normalizeItemImages(items);
+
     const order = await Order.create({
       userId: req.user._id,
       cargoId,
       isPackage,
-      items,
+      items: normalizedItems,
       userNote,
       status: ORDER_STATUS.DRAFT,
     });
@@ -159,6 +162,35 @@ async function confirmCompleted(req, res) {
   }
 }
 
+async function addComment(req, res) {
+  try {
+    const order = await Order.findOne({ _id: req.params.id, userId: req.user._id });
+    if (!order) return res.status(404).json(ERR_NOT_FOUND);
+
+    const { message } = req.body;
+    if (!message || !message.trim()) {
+      return res.status(400).json({ message: "Сэтгэгдэл хоосон байж болохгүй" });
+    }
+
+    order.comments = order.comments || [];
+    order.comments.push({
+      senderId: req.user._id,
+      senderRole: "user",
+      message: message.trim(),
+    });
+    await order.save();
+
+    try {
+      getIO().emit("order:comment", { orderId: order._id, role: "user" });
+    } catch (e) {}
+
+    res.json(order);
+  } catch (err) {
+    console.error("addComment error", err);
+    res.status(500).json({ message: "Серверийн алдаа" });
+  }
+}
+
 module.exports = {
   createDraft,
   publishOrder,
@@ -168,4 +200,5 @@ module.exports = {
   cancelAfterReport,
   acceptReport,
   confirmCompleted,
+  addComment,
 };

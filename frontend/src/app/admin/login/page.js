@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import Button from "@/components/ui/Button";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -32,7 +33,7 @@ export default function AdminLoginPage() {
     <main className="min-h-screen bg-gradient-to-br from-slate-100 via-white to-emerald-50 flex items-center justify-center px-4">
       <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white/90 p-6 shadow-lg backdrop-blur">
         <h1 className="text-2xl font-semibold mb-2">Админ нэвтрэх</h1>
-        <p className="text-sm text-slate-600 mb-4">AMGALANBAI / AMGALAN88</p>
+        <p className="text-sm text-slate-600 mb-4"></p>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Нэвтрэх нэр</label>
@@ -41,7 +42,7 @@ export default function AdminLoginPage() {
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               className="w-full rounded-xl border px-3 py-2 text-sm"
-              placeholder="AMGALANBAI"
+              placeholder="admin"
               required
             />
           </div>
@@ -57,13 +58,9 @@ export default function AdminLoginPage() {
             />
           </div>
           {error && <p className="text-sm text-rose-600">{error}</p>}
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-70"
-          >
+          <Button type="submit" disabled={loading} fullWidth>
             {loading ? "Нэвтэрч байна..." : "Нэвтрэх"}
-          </button>
+          </Button>
         </form>
       </div>
     </main>

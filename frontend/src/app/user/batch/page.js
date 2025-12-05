@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useUI } from "../../layout";
 import { api } from "@/lib/api";
+import Button from "@/components/ui/Button";
+import ImageLightbox from "@/components/ImageLightbox";
 
 const emptyItem = () => ({
   title: "",
@@ -30,6 +32,7 @@ export default function BatchOrderPage() {
   const [submitting, setSubmitting] = useState(false);
   const [successId, setSuccessId] = useState("");
   const [savingDefault, setSavingDefault] = useState(false);
+  const [previewImage, setPreviewImage] = useState("");
 
   const mainClass =
     theme === "night"
@@ -184,8 +187,9 @@ export default function BatchOrderPage() {
   };
 
   return (
-    <main className={`${mainClass} min-h-screen`}>
-      <div className={`${widthClass} mx-auto px-4 py-10 space-y-6`}>
+    <>
+      <main className={`${mainClass} min-h-screen`}>
+        <div className={`${widthClass} mx-auto px-4 py-10 space-y-6`}>
         <div className="flex items-center justify-between">
           <div>
             <p className="text-xs opacity-70">Багц захиалга</p>
@@ -221,8 +225,10 @@ export default function BatchOrderPage() {
               <span>
                 Default: {defaultCargoId ? cargos.find((c) => c._id === defaultCargoId)?.name || "сонгоогүй" : "сонгоогүй"}
               </span>
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="sm"
                 disabled={!selectedCargo || savingDefault}
                 onClick={async () => {
                   if (!selectedCargo) return;
@@ -243,7 +249,7 @@ export default function BatchOrderPage() {
                 className="text-emerald-600 hover:underline disabled:opacity-60"
               >
                 {savingDefault ? "Хадгалж..." : "Default болгох"}
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -252,13 +258,9 @@ export default function BatchOrderPage() {
               <p className="text-sm font-semibold">Барааны жагсаалт</p>
               <p className="text-xs text-slate-500">Доорх картаар мөрөө сонгон засна.</p>
             </div>
-            <button
-              type="button"
-              onClick={addItem}
-              className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-500"
-            >
+            <Button type="button" onClick={addItem} size="sm">
               + Мөр нэмэх
-            </button>
+            </Button>
           </div>
 
           <div className="grid gap-4 md:grid-cols-[1.4fr,1fr]">
@@ -271,21 +273,13 @@ export default function BatchOrderPage() {
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-semibold text-slate-900">#{idx + 1}</h3>
                     <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setCurrentIndex(idx)}
-                        className="text-xs text-emerald-600 hover:underline"
-                      >
+                      <Button type="button" variant="ghost" size="sm" className="text-emerald-600 hover:underline px-0" onClick={() => setCurrentIndex(idx)}>
                         Засах
-                      </button>
+                      </Button>
                       {items.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => removeItem(idx)}
-                          className="text-xs text-rose-600 hover:underline"
-                        >
+                        <Button type="button" variant="ghost" size="sm" className="text-rose-600 hover:underline px-0" onClick={() => removeItem(idx)}>
                           Устгах
-                        </button>
+                        </Button>
                       )}
                     </div>
                   </div>
@@ -359,20 +353,33 @@ export default function BatchOrderPage() {
                   {(items[currentIndex]?.images || []).map((img, imgIdx) => (
                     <div
                       key={imgIdx}
-                      className="relative h-16 w-16 rounded-xl overflow-hidden border border-slate-300"
+                      className="relative h-16 w-16 rounded-xl overflow-hidden border border-slate-300 cursor-zoom-in"
+                      onClick={() => setPreviewImage(img)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setPreviewImage(img);
+                        }
+                      }}
+                      role="button"
+                      tabIndex={0}
+                      aria-label="Зураг томруулах"
                     >
                       <img src={img} alt={`item-${currentIndex}-${imgIdx}`} className="h-full w-full object-cover" />
-                      <button
+                      <Button
                         type="button"
-                        onClick={() =>
+                        variant="ghost"
+                        size="sm"
+                        className="absolute top-1 right-1 h-4 w-4 rounded-full bg-black/60 text-white text-[10px] flex items-center justify-center px-0 py-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
                           updateItem(currentIndex, {
                             images: (items[currentIndex].images || []).filter((_, ii) => ii !== imgIdx),
-                          })
-                        }
-                        className="absolute top-1 right-1 h-4 w-4 rounded-full bg-black/60 text-white text-[10px] flex items-center justify-center"
+                          });
+                        }}
                       >
                         ✕
-                      </button>
+                      </Button>
                     </div>
                   ))}
                   <label className="h-16 w-16 rounded-xl border border-dashed border-slate-300 flex items-center justify-center text-slate-500 cursor-pointer hover:border-emerald-400">
@@ -389,13 +396,9 @@ export default function BatchOrderPage() {
             </div>
           </div>
 
-          <button
-            type="submit"
-            disabled={submitting}
-            className="w-full rounded-xl bg-emerald-600 py-3 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-70"
-          >
+          <Button type="submit" disabled={submitting} fullWidth size="lg">
             {submitting ? "Илгээж байна..." : "Багц захиалга илгээх"}
-          </button>
+          </Button>
         </form>
 
         {successId && (
@@ -407,21 +410,24 @@ export default function BatchOrderPage() {
               <Link href={`/user/requests/${successId}`} className="text-emerald-600 hover:underline">
                 Дэлгэрэнгүй харах
               </Link>
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="sm"
+                className="text-slate-600 hover:underline px-0"
                 onClick={() => {
                   setSuccessId("");
                   router.push("/user/requests");
                 }}
-                className="text-slate-600 hover:underline"
               >
                 Жагсаалт руу буцах
-              </button>
+              </Button>
             </div>
           </div>
         )}
-      </div>
-    </main>
+        </div>
+      </main>
+      <ImageLightbox src={previewImage} alt="Багцын зураг" onClose={() => setPreviewImage("")} />
+    </>
   );
 }
-

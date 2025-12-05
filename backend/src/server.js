@@ -1,7 +1,9 @@
+const dotenv = require("dotenv");
+dotenv.config();
+
 const express = require("express");
 const http = require("http");
 const cors = require("cors");
-const dotenv = require("dotenv");
 const cookieParser = require("cookie-parser");
 const connectDB = require("./config/db");
 const requestRoutes = require("./routes/requestRoutes");
@@ -13,8 +15,10 @@ const adminRoutes = require("./routes/adminRoutes");
 const settingsRoutes = require("./routes/settingsRoutes");
 const { ensureBaseCargo, ensureAdmin } = require("./utils/bootstrap");
 const { initSocket } = require("./socket");
+const { apiLimiter } = require("./middlewares/rateLimiter");
+const { errorHandler } = require("./middlewares/errorHandler");
+const { initLockCleanup } = require("./utils/lockCleanup");
 
-dotenv.config();
 connectDB();
 ensureBaseCargo().catch((err) => console.error("Seed error", err));
 ensureAdmin().catch((err) => console.error("Admin seed error", err));
@@ -41,6 +45,10 @@ app.use(
   })
 );
 
+// Rate limiting
+app.use("/api/", apiLimiter);
+
+// Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/orders", orderRoutes);
@@ -50,10 +58,15 @@ app.use("/api/settings", settingsRoutes);
 app.use("/api/requests", requestRoutes);
 
 app.get("/", (req, res) => {
-  res.send("HELLO ADMIN I,M BACKEND HERE");
+  res.send("AGENTBUY Backend API");
 });
+
+// Global error handler (must be last)
+app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
 
 initSocket(httpServer, ALLOWED_ORIGINS);
+initLockCleanup(); // Lock автоматаар цэвэрлэх
+
 httpServer.listen(PORT, () => console.log("Server running on", PORT));
