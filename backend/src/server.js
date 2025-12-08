@@ -27,7 +27,7 @@ const app = express();
 const httpServer = http.createServer(app);
 
 const ALLOWED_ORIGINS = (process.env.CLIENT_URL ||
-  "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://localhost:3002")
+  "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://localhost:3002,https://agentbuy.mn,https://www.agentbuy.mn,https://agentbuy.vercel.app")
   .split(",")
   .map((o) => o.trim())
   .filter(Boolean);
