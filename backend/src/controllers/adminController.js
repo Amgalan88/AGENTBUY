@@ -3,7 +3,9 @@ const Order = require("../models/orderModel");
 const AgentProfile = require("../models/agentProfileModel");
 const Settings = require("../models/settingsModel");
 const User = require("../models/userModel");
+const CardRequest = require("../models/cardRequestModel");
 const { assertTransition, ORDER_STATUS } = require("../services/orderStateService");
+const { applyCardChange, onPaymentConfirmed } = require("../services/cardService");
 
 async function listCargos(_req, res) {
   const cargos = await Cargo.find().sort({ createdAt: -1 });
@@ -63,7 +65,7 @@ async function listOrders(_req, res) {
 
 async function confirmPayment(req, res) {
   try {
-    const order = await Order.findById(req.params.id);
+    const order = await Order.findById(req.params.id).populate("userId");
     if (!order) return res.status(404).json({ message: "Захиалга олдсонгүй" });
 
     assertTransition(order.status, ORDER_STATUS.PAYMENT_CONFIRMED, "admin");
@@ -82,6 +84,17 @@ async function confirmPayment(req, res) {
     }
 
     await order.save();
+
+    // Карт буцаан олгох логик: Амжилттай захиалга = карт буцаалт + 2 удаа бол бонус
+    if (order.userId) {
+      try {
+        await onPaymentConfirmed(order.userId, order._id);
+      } catch (cardErr) {
+        console.error("Card reward error:", cardErr);
+        // Карт олгох алдаа гарвал захиалгын статус өөрчлөгдсөн тул алдааг log-лоод үргэлжлүүлнэ
+      }
+    }
+
     const populated = await Order.findById(order._id).populate("cargoId");
     res.json(populated);
   } catch (err) {
@@ -164,6 +177,95 @@ async function updateSettings(req, res) {
   }
 }
 
+/**
+ * Картын хүсэлтүүдийг жагсаах
+ */
+async function listCardRequests(_req, res) {
+  try {
+    const { status } = _req.query;
+    const filter = {};
+    if (status) filter.status = status;
+    
+    const requests = await CardRequest.find(filter)
+      .populate("userId", "fullName phone")
+      .populate("confirmedBy", "fullName")
+      .sort({ createdAt: -1 })
+      .limit(100);
+    res.json(requests);
+  } catch (err) {
+    console.error("listCardRequests error", err);
+    res.status(500).json({ message: "Картын хүсэлтүүдийг авахад алдаа гарлаа" });
+  }
+}
+
+/**
+ * Картын хүсэлтийг баталгаажуулах (карт нэмэх)
+ */
+async function confirmCardRequest(req, res) {
+  try {
+    const request = await CardRequest.findById(req.params.id).populate("userId");
+    if (!request) return res.status(404).json({ message: "Хүсэлт олдсонгүй" });
+    
+    if (request.status !== "pending") {
+      return res.status(400).json({ message: "Энэ хүсэлт аль хэдийн боловсруулагдсан" });
+    }
+
+    // Карт нэмэх
+    await applyCardChange(
+      request.userId,
+      request.quantity,
+      "buy_package",
+      null,
+      { requestId: request._id, pricePerCard: request.pricePerCard, totalAmount: request.totalAmount }
+    );
+
+    // Хүсэлтийг баталгаажуулах
+    request.status = "confirmed";
+    request.confirmedBy = req.user._id;
+    request.confirmedAt = new Date();
+    await request.save();
+
+    const populated = await CardRequest.findById(request._id)
+      .populate("userId", "fullName phone")
+      .populate("confirmedBy", "fullName");
+
+    res.json(populated);
+  } catch (err) {
+    console.error("confirmCardRequest error", err);
+    res.status(err.statusCode || 500).json({ message: err.message || "Картын хүсэлт баталгаажуулахад алдаа гарлаа" });
+  }
+}
+
+/**
+ * Картын хүсэлтийг татгалзах
+ */
+async function rejectCardRequest(req, res) {
+  try {
+    const { reason } = req.body;
+    const request = await CardRequest.findById(req.params.id);
+    if (!request) return res.status(404).json({ message: "Хүсэлт олдсонгүй" });
+    
+    if (request.status !== "pending") {
+      return res.status(400).json({ message: "Энэ хүсэлт аль хэдийн боловсруулагдсан" });
+    }
+
+    request.status = "rejected";
+    request.rejectedReason = reason || "Татгалзсан";
+    request.confirmedBy = req.user._id;
+    request.confirmedAt = new Date();
+    await request.save();
+
+    const populated = await CardRequest.findById(request._id)
+      .populate("userId", "fullName phone")
+      .populate("confirmedBy", "fullName");
+
+    res.json(populated);
+  } catch (err) {
+    console.error("rejectCardRequest error", err);
+    res.status(500).json({ message: "Картын хүсэлт татгалзахад алдаа гарлаа" });
+  }
+}
+
 module.exports = {
   listCargos,
   createCargo,
@@ -177,4 +279,7 @@ module.exports = {
   listAgents,
   updateAgentActive,
   updateTracking,
+  listCardRequests,
+  confirmCardRequest,
+  rejectCardRequest,
 };

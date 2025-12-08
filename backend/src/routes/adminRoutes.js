@@ -12,6 +12,9 @@ const {
   updateSettings,
   confirmPayment,
   updateTracking,
+  listCardRequests,
+  confirmCardRequest,
+  rejectCardRequest,
 } = require("../controllers/adminController");
 const { authRequired, requireRole } = require("../middlewares/auth");
 const { ROLES } = require("../constants/roles");
@@ -31,5 +34,8 @@ router.post("/agents/:id/verify", authRequired, requireRole(...adminRoles), veri
 router.post("/agents/:id/status", authRequired, requireRole(...adminRoles), updateAgentActive);
 router.get("/settings", authRequired, requireRole(...adminRoles), getSettings);
 router.post("/settings", authRequired, requireRole(...adminRoles), updateSettings);
+router.get("/card-requests", authRequired, requireRole(...adminRoles), listCardRequests);
+router.post("/card-requests/:id/confirm", authRequired, requireRole(...adminRoles), confirmCardRequest);
+router.post("/card-requests/:id/reject", authRequired, requireRole(...adminRoles), rejectCardRequest);
 
 module.exports = router;

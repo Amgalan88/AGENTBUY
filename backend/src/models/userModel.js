@@ -18,6 +18,7 @@ const userSchema = new mongoose.Schema(
     defaultCargoId: { type: mongoose.Schema.Types.ObjectId, ref: "Cargo" },
     cardBalance: { type: Number, default: 5 },
     cardProgress: { type: Number, default: 0 },
+    completedOrdersCount: { type: Number, default: 0 }, // Амжилттай захиалгын тоо
     isActive: { type: Boolean, default: true },
     lastLoginAt: { type: Date },
     resetToken: { type: String },

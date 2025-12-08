@@ -68,9 +68,12 @@ async function uploadImage(value, options = {}) {
     return value;
   }
   try {
-    return await performUpload(value, options);
+    console.log("[Cloudinary] Uploading image...");
+    const result = await performUpload(value, options);
+    console.log("[Cloudinary] ✅ Upload successful:", result);
+    return result;
   } catch (err) {
-    console.error("Cloudinary upload error:", err.message);
+    console.error("[Cloudinary] ❌ Upload error:", err.message);
     return value;
   }
 }
@@ -83,19 +86,26 @@ async function uploadImages(values = [], options = {}) {
 
 async function normalizeItemImages(items = [], options = {}) {
   if (!Array.isArray(items)) return [];
-  return Promise.all(
+  console.log("[Cloudinary] Normalizing", items.length, "items...");
+  const result = await Promise.all(
     items.map(async (item) => {
       if (!item) return item;
       const next = { ...item };
       if (Array.isArray(item.images) && item.images.length) {
+        console.log("[Cloudinary] Uploading", item.images.length, "images for item:", item.title);
         next.images = await uploadImages(item.images, options);
+        console.log("[Cloudinary] ✅ Images uploaded:", next.images);
       }
       if (typeof item.imageUrl === "string" && item.imageUrl) {
+        console.log("[Cloudinary] Uploading imageUrl for item:", item.title);
         next.imageUrl = await uploadImage(item.imageUrl, options);
+        console.log("[Cloudinary] ✅ ImageUrl uploaded:", next.imageUrl);
       }
       return next;
     })
   );
+  console.log("[Cloudinary] ✅ All items normalized");
+  return result;
 }
 
 module.exports = {
