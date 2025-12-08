@@ -46,7 +46,7 @@ async function publishOrder(req, res) {
 
     assertTransition(order.status, ORDER_STATUS.PUBLISHED, "user");
 
-    await consumeOnPublish(req.user, order._id);
+    await consumeOnPublish(req.user, order._id, order);
     order.status = ORDER_STATUS.PUBLISHED;
     await order.save();
 
@@ -89,8 +89,13 @@ async function cancelBeforeAgent(req, res) {
     order.status = ORDER_STATUS.CANCELLED_BY_USER;
     await order.save();
 
+    const populated = await Order.findById(order._id).populate("cargoId");
     try {
-      getIO().emit("order:update", { orderId: order._id, status: order.status });
+      getIO().emit("order:update", { 
+        orderId: order._id.toString(),
+        status: order.status,
+        order: populated.toObject ? populated.toObject() : populated
+      });
     } catch (e) {}
 
     res.json(order);

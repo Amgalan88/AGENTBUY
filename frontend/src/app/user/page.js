@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import Button from "@/components/ui/Button";
 
 export default function UserEntryPage() {
+  const router = useRouter();
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -78,6 +80,30 @@ export default function UserEntryPage() {
           <p className="text-xs text-muted mt-3 pt-3 border-t border-[var(--surface-card-border)]">
             💡 1 захиалга = 1 карт. Амжилттай бол буцаана.
           </p>
+          {(profile?.cardBalance ?? 0) === 0 && (
+            <div className="mt-3 pt-3 border-t border-[var(--surface-card-border)]">
+              <Button
+                onClick={() => router.push("/user/profile")}
+                variant="primary"
+                fullWidth
+                size="sm"
+              >
+                ➕ Карт авах
+              </Button>
+            </div>
+          )}
+          {(profile?.cardBalance ?? 0) > 0 && (
+            <div className="mt-3 pt-3 border-t border-[var(--surface-card-border)]">
+              <Button
+                onClick={() => router.push("/user/profile")}
+                variant="outline"
+                fullWidth
+                size="sm"
+              >
+                ➕ Нэмэлт карт авах
+              </Button>
+            </div>
+          )}
         </section>
 
         {/* Action Cards */}

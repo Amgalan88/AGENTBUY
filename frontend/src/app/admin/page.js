@@ -61,6 +61,8 @@ export default function AdminPage() {
   const [trackingSaving, setTrackingSaving] = useState("");
   const [paidFrom, setPaidFrom] = useState("");
   const [paidTo, setPaidTo] = useState("");
+  const [cardRequests, setCardRequests] = useState([]);
+  const [cardRequestActionId, setCardRequestActionId] = useState("");
 
   useEffect(() => {
     let alive = true;
@@ -86,12 +88,13 @@ export default function AdminPage() {
       try {
         const ok = await checkAuth();
         if (!ok) return;
-        const [ordersData, agentsData, cargosData, settingsData] =
+        const [ordersData, agentsData, cargosData, settingsData, cardRequestsData] =
           await Promise.all([
             api("/api/admin/orders"),
             api("/api/admin/agents"),
             api("/api/admin/cargos"),
             api("/api/admin/settings"),
+            api("/api/admin/card-requests"),
           ]);
         if (!alive) return;
         setOrders(ordersData || []);
@@ -99,6 +102,7 @@ export default function AdminPage() {
         setCargos(cargosData || []);
         setSettings((p) => ({ ...p, ...(settingsData || {}) }));
         setSettingsBackup(settingsData || {});
+        setCardRequests(cardRequestsData || []);
         const draft = {};
         (ordersData || []).forEach((o) => {
           if (o.tracking?.code) draft[o._id] = o.tracking.code;
@@ -175,6 +179,10 @@ export default function AdminPage() {
       return true;
     });
   }, [confirmedOrders, paidFrom, paidTo]);
+  const pendingCardRequests = useMemo(
+    () => cardRequests.filter((r) => r.status === "pending"),
+    [cardRequests]
+  );
 
   if (loading) {
     return (
@@ -342,6 +350,40 @@ export default function AdminPage() {
       setTrackingSaving("");
     }
   };
+
+  const handleConfirmCardRequest = async (requestId) => {
+    setCardRequestActionId(requestId);
+    setError("");
+    try {
+      const updated = await api(`/api/admin/card-requests/${requestId}/confirm`, {
+        method: "POST",
+      });
+      setCardRequests((prev) => prev.map((r) => (r._id === requestId ? updated : r)));
+    } catch (err) {
+      setError(err.message || "Картын хүсэлт баталгаажуулахад алдаа гарлаа.");
+    } finally {
+      setCardRequestActionId("");
+    }
+  };
+
+  const handleRejectCardRequest = async (requestId) => {
+    const reason = prompt("Татгалзах шалтгаан:");
+    if (!reason) return;
+    setCardRequestActionId(requestId);
+    setError("");
+    try {
+      const updated = await api(`/api/admin/card-requests/${requestId}/reject`, {
+        method: "POST",
+        body: JSON.stringify({ reason }),
+      });
+      setCardRequests((prev) => prev.map((r) => (r._id === requestId ? updated : r)));
+    } catch (err) {
+      setError(err.message || "Картын хүсэлт татгалзахад алдаа гарлаа.");
+    } finally {
+      setCardRequestActionId("");
+    }
+  };
+
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
       <div className="max-w-6xl mx-auto px-4 py-10 space-y-6">
@@ -978,6 +1020,90 @@ export default function AdminPage() {
                   )}
                 </div>
               </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Картын хүсэлт */}
+        <section className="grid gap-6">
+          <div className="rounded-3xl border border-slate-200 bg-white/80 shadow-sm">
+            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
+              <h3 className="text-base font-semibold">
+                Картын хүсэлт ({pendingCardRequests.length})
+              </h3>
+            </div>
+            <div className="w-full">
+              {pendingCardRequests.length === 0 ? (
+                <div className="px-5 py-6 text-center text-slate-500">
+                  Хүлээж байгаа картын хүсэлт алга.
+                </div>
+              ) : (
+                <table className="min-w-full divide-y divide-slate-200">
+                  <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                    <tr>
+                      <th className="px-4 py-3 text-left">Хэрэглэгч</th>
+                      <th className="px-4 py-3 text-left">Картын тоо</th>
+                      <th className="px-4 py-3 text-left">Нийт дүн</th>
+                      <th className="px-4 py-3 text-left">Гүйлгээний утга</th>
+                      <th className="px-4 py-3 text-left">Дансны мэдээлэл</th>
+                      <th className="px-4 py-3 text-left">Үүсгэсэн</th>
+                      <th className="px-4 py-3 text-left">Үйлдэл</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-sm">
+                    {pendingCardRequests.map((req) => (
+                      <tr key={req._id} className="hover:bg-slate-50/80">
+                        <td className="px-4 py-3">
+                          <div>
+                            <p className="font-semibold text-slate-900">
+                              {req.userId?.fullName || "Нэргүй"}
+                            </p>
+                            <p className="text-xs text-slate-500">{req.userId?.phone}</p>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-slate-700">{req.quantity} карт</td>
+                        <td className="px-4 py-3 text-slate-700">
+                          {req.totalAmount?.toLocaleString()}₮
+                        </td>
+                        <td className="px-4 py-3 text-slate-700">
+                          <p className="font-medium">{req.transactionNumber || "—"}</p>
+                        </td>
+                        <td className="px-4 py-3 text-slate-700">
+                          <div className="text-xs">
+                            <p>{req.paymentInfo?.bankName || "—"}</p>
+                            <p>{req.paymentInfo?.bankAccount || "—"}</p>
+                            <p>{req.paymentInfo?.bankOwner || "—"}</p>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-slate-600">
+                          {formatDate(req.createdAt)}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex gap-2">
+                            <Button
+                              disabled={cardRequestActionId === req._id}
+                              onClick={() => handleConfirmCardRequest(req._id)}
+                              size="sm"
+                            >
+                              {cardRequestActionId === req._id
+                                ? "Баталгаажуулж..."
+                                : "Баталгаажуулах"}
+                            </Button>
+                            <Button
+                              disabled={cardRequestActionId === req._id}
+                              onClick={() => handleRejectCardRequest(req._id)}
+                              variant="danger"
+                              size="sm"
+                            >
+                              Татгалзах
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
         </section>

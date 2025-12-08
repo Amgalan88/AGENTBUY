@@ -1,5 +1,5 @@
 const express = require("express");
-const { getProfile, listCargos, setDefaultCargo, requestCards, getMyCardRequests } = require("../controllers/userController");
+const { getProfile, listCargos, setDefaultCargo, requestCards, getMyCardRequests, getMyCardTransactions } = require("../controllers/userController");
 const { authRequired, requireRole } = require("../middlewares/auth");
 const { ROLES } = require("../constants/roles");
 
@@ -10,5 +10,6 @@ router.get("/cargos", authRequired, listCargos);
 router.post("/default-cargo", authRequired, requireRole(ROLES.USER, ROLES.AGENT), setDefaultCargo);
 router.post("/cards/request", authRequired, requireRole(ROLES.USER, ROLES.AGENT), requestCards);
 router.get("/cards/requests", authRequired, requireRole(ROLES.USER, ROLES.AGENT), getMyCardRequests);
+router.get("/cards/transactions", authRequired, requireRole(ROLES.USER, ROLES.AGENT), getMyCardTransactions);
 
 module.exports = router;

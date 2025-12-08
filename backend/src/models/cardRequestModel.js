@@ -16,7 +16,8 @@ const cardRequestSchema = new mongoose.Schema(
       bankAccount: { type: String },
       bankOwner: { type: String },
     },
-    paymentProof: { type: String }, // Төлбөрийн баримт (image URL)
+    transactionNumber: { type: String }, // Гүйлгээний утга / Картын дугаар
+    paymentProof: { type: String }, // Төлбөрийн баримт (image URL) - сонголтоор
     confirmedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, // Админ
     confirmedAt: { type: Date },
     rejectedReason: { type: String },

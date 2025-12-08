@@ -1,5 +1,6 @@
 const Cargo = require("../models/cargoModel");
 const CardRequest = require("../models/cardRequestModel");
+const CardTransaction = require("../models/cardTransactionModel");
 const Settings = require("../models/settingsModel");
 const { safeUser } = require("./utils");
 
@@ -32,10 +33,14 @@ async function setDefaultCargo(req, res) {
  */
 async function requestCards(req, res) {
   try {
-    const { quantity, paymentProof } = req.body;
+    const { quantity, transactionNumber, paymentProof } = req.body;
     
     if (!quantity || quantity < 1) {
       return res.status(400).json({ message: "Картын тоо 1-ээс дээш байх ёстой" });
+    }
+
+    if (!transactionNumber || transactionNumber.trim() === "") {
+      return res.status(400).json({ message: "Гүйлгээний утга / Картын дугаар оруулна уу" });
     }
 
     const PRICE_PER_CARD = 2000; // Карт бүрийн үнэ (MNT)
@@ -55,6 +60,7 @@ async function requestCards(req, res) {
         bankAccount: settings?.bankAccount || "",
         bankOwner: settings?.bankOwner || "",
       },
+      transactionNumber: transactionNumber?.trim() || "",
       paymentProof: paymentProof || undefined,
       status: "pending",
     });
@@ -81,4 +87,20 @@ async function getMyCardRequests(req, res) {
   }
 }
 
-module.exports = { getProfile, listCargos, setDefaultCargo, requestCards, getMyCardRequests };
+/**
+ * Хэрэглэгчийн картын transaction-уудыг авах
+ */
+async function getMyCardTransactions(req, res) {
+  try {
+    const transactions = await CardTransaction.find({ userId: req.user._id })
+      .populate("orderId", "status items")
+      .sort({ createdAt: -1 })
+      .limit(100);
+    res.json(transactions);
+  } catch (err) {
+    console.error("getMyCardTransactions error", err);
+    res.status(500).json({ message: "Картын зарцуулалтыг авахад алдаа гарлаа" });
+  }
+}
+
+module.exports = { getProfile, listCargos, setDefaultCargo, requestCards, getMyCardRequests, getMyCardTransactions };

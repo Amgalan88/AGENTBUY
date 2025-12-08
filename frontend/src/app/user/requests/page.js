@@ -28,8 +28,8 @@ const categoryFilters = [
   { key: "all", label: "Бүгд", match: () => true },
   { key: "published", label: "Нийтэлсэн", match: (s) => ["PUBLISHED"].includes(s) },
   { key: "research", label: "Судалж байна", match: (s) => ["AGENT_LOCKED", "AGENT_RESEARCHING", "REPORT_SUBMITTED", "WAITING_USER_REVIEW"].includes(s) },
-  { key: "payment", label: "Төлбөр", match: (s) => ["WAITING_PAYMENT", "PAYMENT_CONFIRMED", "ORDER_PLACED"].includes(s) },
-  { key: "done", label: "Дууссан", match: (s) => ["CARGO_IN_TRANSIT", "ARRIVED_AT_CARGO", "COMPLETED"].includes(s) },
+  { key: "payment", label: "Төлбөр хүлээж байна", match: (s) => ["WAITING_PAYMENT"].includes(s) },
+  { key: "success", label: "Амжилттай захиалга", match: (s) => ["PAYMENT_CONFIRMED", "ORDER_PLACED", "CARGO_IN_TRANSIT", "ARRIVED_AT_CARGO", "COMPLETED"].includes(s) },
   { key: "cancelled", label: "Цуцалсан", match: (s) => ["USER_REJECTED", "CANCELLED_BY_USER", "CANCELLED_BY_ADMIN", "PAYMENT_EXPIRED"].includes(s) },
 ];
 
@@ -72,13 +72,44 @@ export default function UserRequestsPage() {
     };
     load();
     const socket = getSocket();
-    socket.on("order:new", load);
-    socket.on("order:update", load);
+    
+    // Real-time order updates - refresh хийхгүйгээр шууд шинэчлэх
+    const handleOrderUpdate = (data) => {
+      if (!alive) return;
+      if (data.orderId) {
+        // Шинэчлэгдсэн захиалгыг олох эсвэл нэмэх
+        setOrders((prev) => {
+          const existingIndex = prev.findIndex((o) => o._id === data.orderId);
+          if (existingIndex >= 0) {
+            // Захиалга байвал шинэчлэх
+            const updated = [...prev];
+            if (data.order) {
+              // Order object ирсэн бол бүрэн шинэчлэх
+              updated[existingIndex] = data.order;
+            } else if (data.status) {
+              // Зөвхөн status ирсэн бол status шинэчлэх
+              updated[existingIndex] = { ...updated[existingIndex], status: data.status };
+            }
+            return updated;
+          } else if (data.order) {
+            // Шинэ захиалга байвал нэмэх
+            return [data.order, ...prev];
+          }
+          return prev;
+        });
+      } else {
+        // Order ID байхгүй бол бүх захиалгыг дахин ачаалах
+        load();
+      }
+    };
+    
+    socket.on("order:new", handleOrderUpdate);
+    socket.on("order:update", handleOrderUpdate);
     socket.on("order:comment", load);
     return () => {
       alive = false;
-      socket.off("order:new", load);
-      socket.off("order:update", load);
+      socket.off("order:new", handleOrderUpdate);
+      socket.off("order:update", handleOrderUpdate);
       socket.off("order:comment", load);
     };
   }, []);
@@ -181,13 +212,13 @@ export default function UserRequestsPage() {
               return (
                 <article
                   key={order._id}
-                  className="surface-card rounded-xl sm:rounded-2xl card-padding card-interactive animate-slide-up"
+                  className="surface-card rounded-2xl sm:rounded-3xl card-padding card-interactive animate-slide-up"
                   style={{ animationDelay: `${idx * 0.05}s` }}
                 >
                   {/* Main Content Row */}
                   <div className="flex gap-3 sm:gap-4">
                     {/* Thumbnail */}
-                    <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full overflow-hidden surface-muted shrink-0">
+                    <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden surface-muted shrink-0">
                       <img src={order.thumb} alt={order.firstTitle} className="img-cover" />
                     </div>
                     

@@ -54,17 +54,77 @@ async function applyCardChange(user, diff, type, orderId, meta = {}) {
   return updatedUser;
 }
 
-async function consumeOnPublish(user, orderId) {
+/**
+ * Захиалга нийтлэхэд карт хэрэглэх
+ * Багц захиалга: 1-2 бараа = 1 карт, 3-4 = 2 карт, 5-6 = 3 карт, гэх мэт
+ * Ганц захиалга: 1 карт
+ */
+async function consumeOnPublish(user, orderId, order = null) {
   if ((user.cardBalance || 0) <= 0) {
     const err = new Error("Карт хүрэлцэхгүй тул нийтэлж болохгүй");
     err.statusCode = 400;
     throw err;
   }
-  return applyCardChange(user, -1, "consume", orderId);
+
+  // Захиалгын мэдээлэл авах (хэрэв order object өгөгдөөгүй бол)
+  let orderData = order;
+  if (!orderData) {
+    const Order = require("../models/orderModel");
+    orderData = await Order.findById(orderId);
+  }
+
+  // Багц захиалга эсэхийг шалгах
+  let cardsToConsume = 1; // Default: 1 карт (ганц захиалга)
+  if (orderData?.isPackage && orderData?.items && Array.isArray(orderData.items)) {
+    const itemCount = orderData.items.length;
+    // Багц захиалга: бараа бүр 1 карт
+    cardsToConsume = itemCount;
+    console.log(`[CardService] Багц захиалга: ${itemCount} бараа = ${cardsToConsume} карт хэрэглэнэ`);
+  } else {
+    console.log(`[CardService] Ганц захиалга: 1 карт хэрэглэнэ (isPackage: ${orderData?.isPackage}, items: ${orderData?.items?.length || 0})`);
+  }
+
+  // Картын үлдэгдэл хангалттай эсэхийг шалгах
+  const freshUser = await User.findById(user._id);
+  if ((freshUser.cardBalance || 0) < cardsToConsume) {
+    const err = new Error(`Карт хүрэлцэхгүй. ${cardsToConsume} карт шаардлагатай`);
+    err.statusCode = 400;
+    throw err;
+  }
+
+  return applyCardChange(user, -cardsToConsume, "consume", orderId, {
+    isPackage: orderData?.isPackage || false,
+    itemCount: orderData?.items?.length || 1,
+    cardsConsumed: cardsToConsume,
+  });
 }
 
+/**
+ * Захиалга цуцлагдсан үед карт буцаан олгох
+ * Багц захиалга байсан бол хэрэглэсэн картын тоог буцаан олгох
+ */
 async function returnOnCancel(user, orderId) {
-  return applyCardChange(user, 1, "return", orderId);
+  // Transaction log-оос хэрэглэсэн картын тоог олох
+  const CardTransaction = require("../models/cardTransactionModel");
+  const consumeTransaction = await CardTransaction.findOne({
+    userId: user._id,
+    orderId: orderId,
+    type: "consume",
+  }).sort({ createdAt: -1 });
+
+  if (consumeTransaction) {
+    // Хэрэглэсэн картын тоог буцаан олгох
+    const cardsToReturn = Math.abs(consumeTransaction.cardChange);
+    return applyCardChange(user, cardsToReturn, "return", orderId, {
+      reason: "order_cancelled",
+      originalConsume: consumeTransaction._id,
+    });
+  } else {
+    // Transaction олдохгүй бол default 1 карт буцаан олгох
+    return applyCardChange(user, 1, "return", orderId, {
+      reason: "order_cancelled",
+    });
+  }
 }
 
 /**

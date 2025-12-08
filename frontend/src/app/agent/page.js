@@ -144,12 +144,12 @@ export default function AgentPage() {
               return (
                 <article 
                   key={order._id} 
-                  className="order-card-dark rounded-xl sm:rounded-2xl p-4 sm:p-5 card-interactive animate-slide-up"
+                  className="order-card-dark rounded-2xl sm:rounded-3xl p-4 sm:p-5 card-interactive animate-slide-up"
                   style={{animationDelay: `${idx * 0.05}s`}}
                 >
                   <div className="flex gap-3 sm:gap-4">
                     {/* Thumbnail */}
-                    <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-lg sm:rounded-xl overflow-hidden bg-white/10 shrink-0">
+                    <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-2xl overflow-hidden bg-white/10 shrink-0">
                       <img src={order.thumb} alt={order.firstTitle} className="img-cover" />
                     </div>
                     

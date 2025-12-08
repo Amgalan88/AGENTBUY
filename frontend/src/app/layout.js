@@ -10,10 +10,16 @@ export default function RootLayout({ children }) {
   const [theme, setTheme] = useState("light");
   const [view, setView] = useState("mobile");
 
-  // Detect system preference on mount
+  // Load theme from localStorage on mount
   useEffect(() => {
-    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    setTheme(prefersDark ? "dark" : "light");
+    const savedTheme = localStorage.getItem("theme");
+    if (savedTheme === "dark" || savedTheme === "light") {
+      setTheme(savedTheme);
+    } else {
+      // Detect system preference if no saved theme
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      setTheme(prefersDark ? "dark" : "light");
+    }
     
     // Detect viewport
     const updateView = () => {
@@ -28,7 +34,11 @@ export default function RootLayout({ children }) {
   }, []);
 
   const cycleTheme = () => {
-    setTheme((prev) => (prev === "light" ? "dark" : "light"));
+    setTheme((prev) => {
+      const next = prev === "light" ? "dark" : "light";
+      localStorage.setItem("theme", next);
+      return next;
+    });
   };
 
   const cycleView = () => {

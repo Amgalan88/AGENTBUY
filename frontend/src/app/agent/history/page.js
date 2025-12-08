@@ -153,12 +153,12 @@ export default function AgentHistoryPage() {
               return (
                 <article
                   key={order._id}
-                  className="surface-card rounded-xl sm:rounded-2xl card-padding card-interactive animate-slide-up"
+                  className="surface-card rounded-2xl sm:rounded-3xl card-padding card-interactive animate-slide-up"
                   style={{ animationDelay: `${idx * 0.05}s` }}
                 >
                   <div className="flex gap-3 sm:gap-4">
                     {/* Thumbnail */}
-                    <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg sm:rounded-xl overflow-hidden surface-muted shrink-0">
+                    <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden surface-muted shrink-0">
                       <img src={order.thumb} alt={order.firstTitle} className="img-cover" />
                     </div>
                     

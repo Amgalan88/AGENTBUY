@@ -6,6 +6,7 @@ const User = require("../models/userModel");
 const CardRequest = require("../models/cardRequestModel");
 const { assertTransition, ORDER_STATUS } = require("../services/orderStateService");
 const { applyCardChange, onPaymentConfirmed } = require("../services/cardService");
+const { getIO } = require("../socket");
 
 async function listCargos(_req, res) {
   const cargos = await Cargo.find().sort({ createdAt: -1 });
@@ -89,6 +90,16 @@ async function confirmPayment(req, res) {
     if (order.userId) {
       try {
         await onPaymentConfirmed(order.userId, order._id);
+        // Socket event илгээх - хэрэглэгчид мэдэгдэх
+        const updatedUser = await User.findById(order.userId._id);
+        try {
+          getIO().emit("card:balance:update", { 
+            userId: order.userId._id.toString(),
+            cardBalance: updatedUser.cardBalance 
+          });
+        } catch (e) {
+          console.error("Socket emit error:", e);
+        }
       } catch (cardErr) {
         console.error("Card reward error:", cardErr);
         // Карт олгох алдаа гарвал захиалгын статус өөрчлөгдсөн тул алдааг log-лоод үргэлжлүүлнэ
@@ -96,6 +107,18 @@ async function confirmPayment(req, res) {
     }
 
     const populated = await Order.findById(order._id).populate("cargoId");
+    
+    // Socket event илгээх - захиалгын статус өөрчлөгдсөнийг мэдэгдэх
+    try {
+      getIO().emit("order:update", { 
+        orderId: order._id.toString(),
+        status: order.status,
+        order: populated.toObject ? populated.toObject() : populated
+      });
+    } catch (e) {
+      console.error("Socket emit error:", e);
+    }
+    
     res.json(populated);
   } catch (err) {
     console.error("confirmPayment error", err);
@@ -228,6 +251,16 @@ async function confirmCardRequest(req, res) {
     const populated = await CardRequest.findById(request._id)
       .populate("userId", "fullName phone")
       .populate("confirmedBy", "fullName");
+
+    // Socket event илгээх - хэрэглэгчид мэдэгдэх
+    try {
+      getIO().emit("card:balance:update", { 
+        userId: request.userId._id.toString(),
+        cardBalance: request.userId.cardBalance 
+      });
+    } catch (e) {
+      console.error("Socket emit error:", e);
+    }
 
     res.json(populated);
   } catch (err) {

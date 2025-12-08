@@ -85,6 +85,8 @@ async function register(req, res) {
 async function login(req, res) {
   try {
     const { phone, password, remember } = req.body;
+    console.log(`[Auth] Login attempt: phone=${phone}, remember=${remember} (type: ${typeof remember})`);
+    
     if (!phone || !password) {
       return res.status(400).json({ message: "Утас, нууц үг оруулна уу" });
     }
@@ -103,9 +105,14 @@ async function login(req, res) {
     if (firstLogin) {
       await applyCardChange(user, 3, "bonus_card", null, { reason: "first_login_bonus" });
     }
-    const tokenAge = remember ? REMEMBER_TOKEN_AGE : DEFAULT_TOKEN_AGE;
+    
+    // remember параметр зөв унших (string "true" эсвэл boolean true)
+    const shouldRemember = remember === true || remember === "true" || remember === 1;
+    const tokenAge = shouldRemember ? REMEMBER_TOKEN_AGE : DEFAULT_TOKEN_AGE;
     const token = signToken(user, tokenAge);
     setAuthCookie(res, token, tokenAge);
+    
+    console.log(`[Auth] ✅ Login success: ${user.phone}, remember=${shouldRemember}, tokenAge=${tokenAge}s (${tokenAge / 86400} хоног)`);
     res.json(safeUser(user));
   } catch (err) {
     console.error("login error", err);
