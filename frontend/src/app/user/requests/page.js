@@ -64,6 +64,21 @@ export default function UserRequestsPage() {
         // Limit нэмэх - хамгийн сүүлийн 50 захиалга л татана
         const data = await api("/api/orders?limit=50");
         if (!alive) return;
+        
+        // Debug: Зургийн мэдээлэл шалгах
+        if (data && data.length > 0) {
+          console.log("[Debug] Orders loaded:", data.length);
+          const firstOrder = data[0];
+          if (firstOrder.items?.[0]) {
+            console.log("[Debug] First order images:", {
+              orderId: firstOrder._id,
+              hasImages: !!firstOrder.items[0].images,
+              images: firstOrder.items[0].images,
+              imageUrl: firstOrder.items[0].imageUrl
+            });
+          }
+        }
+        
         setOrders(data);
       } catch (err) {
         if (!alive) return;
@@ -263,6 +278,12 @@ export default function UserRequestsPage() {
         const firstTitle = o.items?.[0]?.title || "Бараа";
         // Зургийн URL-ийг шалгах - base64 биш, Cloudinary URL эсвэл default image
         const firstImage = o.items?.[0]?.images?.[0] || o.items?.[0]?.imageUrl;
+        
+        // Base64 string байвал console-д мэдэгдэх
+        if (firstImage && typeof firstImage === "string" && firstImage.startsWith("data:")) {
+          console.warn("⚠️ Image still in base64 format (not uploaded to Cloudinary):", o._id);
+        }
+        
         // Base64 string байвал (Cloudinary upload хийгдээгүй) default image ашиглах
         // Мөн хоосон эсвэл буруу URL байвал default image ашиглах
         const thumb = (firstImage && 
@@ -273,9 +294,14 @@ export default function UserRequestsPage() {
           ? firstImage 
           : "/marketplace/taobao.png";
         
-        // Base64 string байвал console-д мэдэгдэх
-        if (firstImage && firstImage.startsWith("data:")) {
-          console.warn("⚠️ Image still in base64 format (not uploaded to Cloudinary):", o._id);
+        // Debug мэдээлэл
+        if (!thumb || thumb === "/marketplace/taobao.png") {
+          console.log(`[Debug] Order ${o._id} thumbnail:`, {
+            firstImage: firstImage ? firstImage.substring(0, 50) + "..." : "null",
+            thumb: thumb,
+            hasImages: !!o.items?.[0]?.images,
+            imagesLength: o.items?.[0]?.images?.length || 0
+          });
         }
         const isPaid = ["PAYMENT_CONFIRMED", "ORDER_PLACED", "CARGO_IN_TRANSIT", "ARRIVED_AT_CARGO", "COMPLETED"].includes(o.status);
         const tracking = o.tracking?.code || "";
