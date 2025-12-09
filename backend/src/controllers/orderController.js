@@ -266,13 +266,8 @@ async function updateDraft(req, res) {
     const { items, cargoId, userNote } = req.body;
     
     if (items && Array.isArray(items) && items.length > 0) {
-      let normalizedItems;
-      try {
-        normalizedItems = await normalizeItemImages(items);
-      } catch (err) {
-        console.error("Cloudinary upload error:", err);
-        normalizedItems = items;
-      }
+      // Cloudinary-д зураг upload хийх (зөвхөн Cloudinary URL-уудыг хадгалах)
+      const normalizedItems = await normalizeItemImages(items);
       order.items = normalizedItems;
     }
 
