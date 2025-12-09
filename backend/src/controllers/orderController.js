@@ -76,17 +76,35 @@ async function listUserOrders(req, res) {
   // Base64 string-уудыг filter хийх (зөвхөн Cloudinary URL-уудыг буцаах)
   const filteredOrders = orders.map(order => {
     const filteredItems = (order.items || []).map(item => {
-      if (item.images && Array.isArray(item.images)) {
-        // Base64 string-уудыг filter хийх
-        const filteredImages = item.images.filter(img => 
+      const itemObj = item.toObject ? item.toObject() : { ...item };
+      
+      // images array байвал filter хийх
+      if (itemObj.images && Array.isArray(itemObj.images)) {
+        // Base64 string-уудыг filter хийх (зөвхөн Cloudinary URL-уудыг үлдээх)
+        const filteredImages = itemObj.images.filter(img => 
           img && 
           typeof img === "string" && 
+          img.trim() !== "" &&
           !img.startsWith("data:") &&
           (img.startsWith("http://") || img.startsWith("https://"))
         );
-        return { ...item.toObject(), images: filteredImages };
+        return { ...itemObj, images: filteredImages };
       }
-      return item.toObject();
+      
+      // images байхгүй эсвэл array биш бол imageUrl шалгах
+      if (!itemObj.images && itemObj.imageUrl) {
+        // imageUrl нь Cloudinary URL эсэх шалгах
+        if (itemObj.imageUrl && 
+            typeof itemObj.imageUrl === "string" && 
+            !itemObj.imageUrl.startsWith("data:") &&
+            (itemObj.imageUrl.startsWith("http://") || itemObj.imageUrl.startsWith("https://"))) {
+          // imageUrl-ийг images array болгох
+          return { ...itemObj, images: [itemObj.imageUrl] };
+        }
+      }
+      
+      // images байхгүй бол хоосон array буцаах (undefined биш)
+      return { ...itemObj, images: itemObj.images || [] };
     });
     return { ...order.toObject(), items: filteredItems };
   });
