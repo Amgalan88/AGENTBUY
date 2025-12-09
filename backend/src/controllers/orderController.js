@@ -21,14 +21,10 @@ async function createDraft(req, res) {
       return res.status(400).json({ message: "Карго олдсонгүй" });
     }
 
-    let normalizedItems;
-    try {
-      normalizedItems = await normalizeItemImages(items);
-    } catch (err) {
-      console.error("Cloudinary upload error:", err);
-      // Cloudinary upload алдаа гарвал base64 string-тэй хадгалах
-      normalizedItems = items;
-    }
+    // Cloudinary-д зураг upload хийх (base64 string-уудыг URL болгох)
+    const normalizedItems = await normalizeItemImages(items);
+    // normalizeItemImages алдаа гарвал null эсвэл алдаа throw хийх
+    // Энэ нь зөвхөн Cloudinary URL-уудыг буцаана, base64 string-уудыг filter хийж байна
 
     const order = await Order.create({
       userId: req.user._id,
