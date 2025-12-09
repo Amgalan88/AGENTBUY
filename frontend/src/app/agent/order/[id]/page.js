@@ -244,35 +244,71 @@ export default function AgentOrderDetailPage({ params }) {
                     <div className="grid gap-4 md:grid-cols-3">
                         <div className="md:col-span-2 space-y-3">
                             <h2 className="text-sm font-semibold">Барааны жагсаалт</h2>
-                            {request.items.map((it, i) => (
-                                <div
-                                    key={i}
-                                    className="rounded-xl border border-slate-200 px-4 py-3 text-sm space-y-1"
-                                >
-                                    <p className="font-medium">
-                                        #{i + 1} — {it.name} {it.mark ? `• ${it.mark}` : ""}
-                                    </p>
-                                    <p className="text-xs opacity-70">
-                                        Тоо: {it.quantity} • Платформ: {appLabel[it.app] || it.app}
-                                    </p>
-                                    {it.link && (
-                                        <p className="text-xs">
-                                            Линк: {" "}
-                                            <a
-                                                href={it.link}
-                                                target="_blank"
-                                                rel="noreferrer"
-                                                className="text-emerald-600 underline"
-                                            >
-                                                {it.link}
-                                            </a>
-                                        </p>
-                                    )}
-                                    {it.note && (
-                                        <p className="text-xs opacity-80">Тэмдэглэл: {it.note}</p>
-                                    )}
-                                </div>
-                            ))}
+                            {request.items.map((it, i) => {
+                                // Base64 string-уудыг filter хийх (зөвхөн URL-уудыг харуулах)
+                                const rawImgs = it.images || (it.imageUrl ? [it.imageUrl] : []);
+                                const imgs = rawImgs.filter(img => 
+                                    img && 
+                                    typeof img === "string" && 
+                                    img.trim() !== "" && 
+                                    !img.startsWith("data:") &&
+                                    (img.startsWith("http://") || img.startsWith("https://"))
+                                );
+                                return (
+                                    <div
+                                        key={i}
+                                        className="rounded-xl border border-slate-200 px-4 py-3 text-sm space-y-1"
+                                    >
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="flex-1 space-y-1">
+                                                <p className="font-medium">
+                                                    #{i + 1} — {it.name} {it.mark ? `• ${it.mark}` : ""}
+                                                </p>
+                                                <p className="text-xs opacity-70">
+                                                    Тоо: {it.quantity} • Платформ: {appLabel[it.app] || it.app}
+                                                </p>
+                                                {it.link && (
+                                                    <p className="text-xs">
+                                                        Линк: {" "}
+                                                        <a
+                                                            href={it.link}
+                                                            target="_blank"
+                                                            rel="noreferrer"
+                                                            className="text-emerald-600 underline"
+                                                        >
+                                                            {it.link}
+                                                        </a>
+                                                    </p>
+                                                )}
+                                                {it.note && (
+                                                    <p className="text-xs opacity-80">Тэмдэглэл: {it.note}</p>
+                                                )}
+                                            </div>
+                                            {imgs.length > 0 && (
+                                                <div className="flex gap-2 flex-wrap shrink-0">
+                                                    {imgs.slice(0, 3).map((img, imgIdx) => (
+                                                        <div
+                                                            key={imgIdx}
+                                                            className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden border border-slate-200 cursor-pointer"
+                                                            onClick={() => window.open(img, '_blank')}
+                                                        >
+                                                            <img 
+                                                                src={img} 
+                                                                alt={`${it.name} ${imgIdx + 1}`} 
+                                                                className="w-full h-full object-cover"
+                                                                onError={(e) => {
+                                                                    console.error("Image load error:", img);
+                                                                    e.target.style.display = "none";
+                                                                }}
+                                                            />
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
 
                         <div className="space-y-3">

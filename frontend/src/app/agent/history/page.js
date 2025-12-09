@@ -83,7 +83,16 @@ export default function AgentHistoryPage() {
       const totalQty = o.items?.reduce((s, it) => s + (it.quantity || 0), 0) || 0;
       const firstItem = o.items?.[0] || {};
       const firstTitle = firstItem.title || "Барааны нэр ороогүй";
-      const thumb = firstItem.images?.[0] || firstItem.imageUrl || "/marketplace/taobao.png";
+        // Base64 string-уудыг filter хийх (зөвхөн URL-уудыг харуулах)
+        const rawImages = firstItem.images || (firstItem.imageUrl ? [firstItem.imageUrl] : []);
+        const validImages = rawImages.filter(img => 
+          img && 
+          typeof img === "string" && 
+          img.trim() !== "" && 
+          !img.startsWith("data:") &&
+          (img.startsWith("http://") || img.startsWith("https://"))
+        );
+        const thumb = validImages[0] || "/marketplace/taobao.png";
       const userCommentCount = (o.comments || []).filter(c => c.senderRole === "user").length;
       return { ...o, totalQty, firstTitle, thumb, userCommentCount };
     });
@@ -159,7 +168,15 @@ export default function AgentHistoryPage() {
                   <div className="flex gap-3 sm:gap-4">
                     {/* Thumbnail */}
                     <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden surface-muted shrink-0">
-                      <img src={order.thumb} alt={order.firstTitle} className="img-cover" />
+                      <img 
+                        src={order.thumb} 
+                        alt={order.firstTitle} 
+                        className="img-cover"
+                        onError={(e) => {
+                          console.error("Thumbnail load error:", order.thumb);
+                          e.target.src = "/marketplace/taobao.png";
+                        }}
+                      />
                     </div>
                     
                     {/* Content */}

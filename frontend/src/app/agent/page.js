@@ -92,7 +92,16 @@ export default function AgentPage() {
         const totalQty = o.items?.reduce((s, it) => s + (it.quantity || 0), 0) || 0;
         const firstItem = o.items?.[0] || {};
         const firstTitle = firstItem.title || "Барааны нэр ороогүй";
-        const thumb = firstItem.images?.[0] || firstItem.imageUrl || "/marketplace/taobao.png";
+        // Base64 string-уудыг filter хийх (зөвхөн URL-уудыг харуулах)
+        const rawImages = firstItem.images || (firstItem.imageUrl ? [firstItem.imageUrl] : []);
+        const validImages = rawImages.filter(img => 
+          img && 
+          typeof img === "string" && 
+          img.trim() !== "" && 
+          !img.startsWith("data:") &&
+          (img.startsWith("http://") || img.startsWith("https://"))
+        );
+        const thumb = validImages[0] || "/marketplace/taobao.png";
         return { ...o, totalQty, firstTitle, thumb };
       }),
     [orders]
@@ -150,7 +159,15 @@ export default function AgentPage() {
                   <div className="flex gap-3 sm:gap-4">
                     {/* Thumbnail */}
                     <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-2xl overflow-hidden bg-white/10 shrink-0">
-                      <img src={order.thumb} alt={order.firstTitle} className="img-cover" />
+                      <img 
+                        src={order.thumb} 
+                        alt={order.firstTitle} 
+                        className="img-cover"
+                        onError={(e) => {
+                          console.error("Thumbnail load error:", order.thumb);
+                          e.target.src = "/marketplace/taobao.png";
+                        }}
+                      />
                     </div>
                     
                     {/* Content */}
