@@ -187,7 +187,19 @@ export default function UserOrderDetailPage() {
                 {showItems ? (
                   <div className="space-y-2">
                     {items.map((item, idx) => {
-                      const imgs = item.images || (item.imageUrl ? [item.imageUrl] : []);
+                      // Base64 string-уудыг filter хийх (зөвхөн URL-уудыг харуулах)
+                      const rawImgs = item.images || (item.imageUrl ? [item.imageUrl] : []);
+                      const imgs = rawImgs.filter(img => 
+                        img && 
+                        typeof img === "string" && 
+                        img.trim() !== "" && 
+                        !img.startsWith("data:") &&
+                        (img.startsWith("http://") || img.startsWith("https://"))
+                      );
+                      // Base64 string байвал console-д мэдэгдэх
+                      if (rawImgs.length > 0 && rawImgs.some(img => img && img.startsWith("data:"))) {
+                        console.warn("⚠️ Some images still in base64 format:", item.title);
+                      }
                       return (
                         <div key={idx} className="surface-muted rounded-xl p-3 flex justify-between gap-3">
                           <div className="space-y-1 flex-1 min-w-0">
@@ -205,7 +217,20 @@ export default function UserOrderDetailPage() {
                               className="w-12 h-12 sm:w-14 sm:h-14 rounded-lg overflow-hidden surface-card cursor-pointer shrink-0"
                               onClick={() => setPreviewImage(imgs[0])}
                             >
-                              <img src={imgs[0]} alt={item.title} className="img-cover" />
+                              <img 
+                                src={imgs[0]} 
+                                alt={item.title} 
+                                className="img-cover"
+                                onError={(e) => {
+                                  console.error("Image load error:", imgs[0]);
+                                  // Base64 эсвэл буруу URL байвал fallback
+                                  if (imgs[0] && imgs[0].startsWith("data:")) {
+                                    e.target.src = "/marketplace/taobao.png";
+                                  } else {
+                                    e.target.style.display = "none";
+                                  }
+                                }}
+                              />
                             </div>
                           )}
                         </div>
@@ -230,7 +255,15 @@ export default function UserOrderDetailPage() {
                   </div>
                   <div className="space-y-2">
                     {reportItems.map((rItem, idx) => {
-                      const imgs = rItem.images || (rItem.imageUrl ? [rItem.imageUrl] : []);
+                      // Base64 string-уудыг filter хийх
+                      const rawImgs = rItem.images || (rItem.imageUrl ? [rItem.imageUrl] : []);
+                      const imgs = rawImgs.filter(img => 
+                        img && 
+                        typeof img === "string" && 
+                        img.trim() !== "" && 
+                        !img.startsWith("data:") &&
+                        (img.startsWith("http://") || img.startsWith("https://"))
+                      );
                       const total = rItem.agentTotal ?? (rItem.agentPrice || 0) * (rItem.quantity || 1);
                       return (
                         <div key={idx} className="surface-muted rounded-xl p-3 flex justify-between gap-3">
@@ -244,7 +277,19 @@ export default function UserOrderDetailPage() {
                               className="w-12 h-12 sm:w-14 sm:h-14 rounded-lg overflow-hidden surface-card cursor-pointer shrink-0"
                               onClick={() => setPreviewImage(imgs[0])}
                             >
-                              <img src={imgs[0]} alt={rItem.title} className="img-cover" />
+                              <img 
+                                src={imgs[0]} 
+                                alt={rItem.title} 
+                                className="img-cover"
+                                onError={(e) => {
+                                  console.error("Image load error:", imgs[0]);
+                                  if (imgs[0] && imgs[0].startsWith("data:")) {
+                                    e.target.src = "/marketplace/taobao.png";
+                                  } else {
+                                    e.target.style.display = "none";
+                                  }
+                                }}
+                              />
                             </div>
                           )}
                         </div>

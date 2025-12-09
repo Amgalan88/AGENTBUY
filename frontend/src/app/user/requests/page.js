@@ -263,9 +263,20 @@ export default function UserRequestsPage() {
         const firstTitle = o.items?.[0]?.title || "Бараа";
         // Зургийн URL-ийг шалгах - base64 биш, Cloudinary URL эсвэл default image
         const firstImage = o.items?.[0]?.images?.[0] || o.items?.[0]?.imageUrl;
-        const thumb = (firstImage && !firstImage.startsWith("data:")) 
+        // Base64 string байвал (Cloudinary upload хийгдээгүй) default image ашиглах
+        // Мөн хоосон эсвэл буруу URL байвал default image ашиглах
+        const thumb = (firstImage && 
+                       typeof firstImage === "string" && 
+                       firstImage.trim() !== "" && 
+                       !firstImage.startsWith("data:") &&
+                       (firstImage.startsWith("http://") || firstImage.startsWith("https://"))) 
           ? firstImage 
           : "/marketplace/taobao.png";
+        
+        // Base64 string байвал console-д мэдэгдэх
+        if (firstImage && firstImage.startsWith("data:")) {
+          console.warn("⚠️ Image still in base64 format (not uploaded to Cloudinary):", o._id);
+        }
         const isPaid = ["PAYMENT_CONFIRMED", "ORDER_PLACED", "CARGO_IN_TRANSIT", "ARRIVED_AT_CARGO", "COMPLETED"].includes(o.status);
         const tracking = o.tracking?.code || "";
         const cargoName = (typeof o.cargoId === "object" && o.cargoId?.name) || "Карго";
@@ -408,6 +419,10 @@ export default function UserRequestsPage() {
                         alt={order.firstTitle} 
                         className="img-cover w-full h-full"
                         loading="lazy"
+                        onError={(e) => {
+                          console.error("Thumbnail load error:", order.thumb);
+                          e.target.src = "/marketplace/taobao.png";
+                        }}
                       />
                     </Link>
                     
