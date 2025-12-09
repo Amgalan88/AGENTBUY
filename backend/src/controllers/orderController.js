@@ -74,10 +74,28 @@ async function listUserOrders(req, res) {
   if (status) filter.status = status;
   const orders = await Order.find(filter)
     .populate("cargoId", "name")
-    .select("-items.images") // Зургийн base64 string-уудыг буцаахгүй (зөвхөн Cloudinary URL)
     .sort({ createdAt: -1 })
     .limit(Number(limit));
-  res.json(orders);
+  
+  // Base64 string-уудыг filter хийх (зөвхөн Cloudinary URL-уудыг буцаах)
+  const filteredOrders = orders.map(order => {
+    const filteredItems = (order.items || []).map(item => {
+      if (item.images && Array.isArray(item.images)) {
+        // Base64 string-уудыг filter хийх
+        const filteredImages = item.images.filter(img => 
+          img && 
+          typeof img === "string" && 
+          !img.startsWith("data:") &&
+          (img.startsWith("http://") || img.startsWith("https://"))
+        );
+        return { ...item.toObject(), images: filteredImages };
+      }
+      return item.toObject();
+    });
+    return { ...order.toObject(), items: filteredItems };
+  });
+  
+  res.json(filteredOrders);
 }
 
 async function getOrderDetail(req, res) {
