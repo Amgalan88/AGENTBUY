@@ -528,7 +528,7 @@ export default function UserRequestsPage() {
                               {deletingOrderId === order._id ? "⏳" : "🗑️"}
                             </button>
                           )}
-                          <Link href={`/user/requests/${order._id}`}>
+                          <Link href={`/user/requests/${order._id}`} prefetch={false}>
                             <button
                               className="px-3 py-2 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary font-medium text-xs sm:text-sm transition-colors"
                               title="Дэлгэрэнгүй"
