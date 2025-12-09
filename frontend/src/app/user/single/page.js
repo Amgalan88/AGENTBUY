@@ -36,6 +36,7 @@ function SingleOrderForm() {
   const [savingDefault, setSavingDefault] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [previewImage, setPreviewImage] = useState("");
+  const [draftOrderId, setDraftOrderId] = useState(null);
 
   const mainClass =
     theme === "night"
@@ -73,10 +74,37 @@ function SingleOrderForm() {
       setLoading(true);
       setError("");
       try {
-        const [cargoData, profile] = await Promise.all([api("/api/user/cargos"), api("/api/auth/me")]);
+        const editId = searchParams.get("edit");
+        const results = await Promise.all([
+          api("/api/user/cargos"),
+          api("/api/auth/me"),
+          ...(editId ? [api(`/api/orders/${editId}`)] : []),
+        ]);
         if (!alive) return;
+        
+        const cargoData = results[0];
+        const profile = results[1];
         setCargos(cargoData);
         setDefaultCargoId(profile?.defaultCargoId || "");
+        
+        // Edit mode - ноорог захиалга ачаалах
+        if (editId && results[2] && results[2].status === "DRAFT") {
+          const order = results[2];
+          setDraftOrderId(order._id);
+          setSelectedCargo(order.cargoId?._id || order.cargoId || "");
+          if (order.items && order.items.length > 0) {
+            const firstItem = order.items[0];
+            setTitle(firstItem.title || "");
+            setQuantity(firstItem.quantity || 1);
+            setSourceUrl(firstItem.sourceUrl || "");
+            setNote(firstItem.userNotes || "");
+            setApp(firstItem.app || "any");
+            setImages(firstItem.images || []);
+          }
+          setLoading(false);
+          return;
+        }
+        
         const fromQuery = searchParams.get("cargo");
         if (fromQuery && cargoData.find((c) => c._id === fromQuery)) {
           setSelectedCargo(fromQuery);
@@ -129,24 +157,50 @@ function SingleOrderForm() {
 
     setSubmitting(true);
     try {
-      const created = await api("/api/orders", {
-        method: "POST",
-        body: JSON.stringify({
-          cargoId: selectedCargo,
-          isPackage: false,
-          items: [
-            {
-              title: title.trim(),
-              quantity: Number(quantity),
-              sourceUrl: sourceUrl || undefined,
-              images,
-              userNotes: note || undefined,
-              app,
-            },
-          ],
-        }),
-      });
-      await api(`/api/orders/${created._id}/publish`, { method: "POST" });
+      let orderId = draftOrderId;
+
+      // Ноорог байгаа бол шинэчлэх, байхгүй бол үүсгэх
+      if (orderId) {
+        await api(`/api/orders/${orderId}/draft`, {
+          method: "PUT",
+          body: JSON.stringify({
+            cargoId: selectedCargo,
+            items: [
+              {
+                title: title.trim(),
+                quantity: Number(quantity),
+                sourceUrl: sourceUrl || undefined,
+                images,
+                userNotes: note || undefined,
+                app,
+              },
+            ],
+          }),
+        });
+      } else {
+        const created = await api("/api/orders", {
+          method: "POST",
+          body: JSON.stringify({
+            cargoId: selectedCargo,
+            isPackage: false,
+            items: [
+              {
+                title: title.trim(),
+                quantity: Number(quantity),
+                sourceUrl: sourceUrl || undefined,
+                images,
+                userNotes: note || undefined,
+                app,
+              },
+            ],
+          }),
+        });
+        orderId = created._id;
+      }
+
+      // Нийтлэх
+      await api(`/api/orders/${orderId}/publish`, { method: "POST" });
+      
       // сонгосон карго-г default болгох
       if (selectedCargo) {
         await api("/api/user/default-cargo", {
@@ -155,13 +209,14 @@ function SingleOrderForm() {
         });
         setDefaultCargoId(selectedCargo);
       }
-      setSuccessId(created._id);
+      setSuccessId(orderId);
       setTitle("");
       setQuantity(1);
       setSourceUrl("");
       setNote("");
       setApp("any");
       setImages([]);
+      setDraftOrderId(null);
     } catch (err) {
       setError(err.message || "Захиалга үүсгэж чадсангүй");
     } finally {

@@ -6,6 +6,7 @@ import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useUI } from "@/app/layout";
 import { getSocket } from "@/lib/socket";
+import { api } from "@/lib/api";
 import Button from "@/components/ui/Button";
 
 const appLabel = {
@@ -74,9 +75,7 @@ export default function AgentOrderDetailPage({ params }) {
         let alive = true;
         async function loadRequest() {
             try {
-                const res = await fetch(`http://localhost:5000/api/requests/${id}`);
-                if (!res.ok) throw new Error(`API error ${res.status}`);
-                const data = await res.json();
+                const data = await api(`/api/requests/${id}`);
                 if (alive) setRequest(data);
             } catch (err) {
                 console.error("Failed to load request detail", err);
@@ -117,11 +116,9 @@ export default function AgentOrderDetailPage({ params }) {
         setClaiming(true);
         setError("");
         try {
-            const res = await fetch(`http://localhost:5000/api/requests/${id}/claim`, {
+            const data = await api(`/api/requests/${id}/claim`, {
                 method: "POST",
             });
-            if (!res.ok) throw new Error(`Claim failed ${res.status}`);
-            const data = await res.json();
             setRequest(data);
         } catch (err) {
             console.error(err);
@@ -143,13 +140,10 @@ export default function AgentOrderDetailPage({ params }) {
                 paymentLink: form.payLink,
                 image: form.image,
             };
-            const res = await fetch(`http://localhost:5000/api/requests/${id}/report`, {
+            const data = await api(`/api/requests/${id}/report`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload),
+                body: payload,
             });
-            if (!res.ok) throw new Error(`Report failed ${res.status}`);
-            const data = await res.json();
             setRequest(data);
         } catch (err) {
             console.error(err);
@@ -167,13 +161,10 @@ export default function AgentOrderDetailPage({ params }) {
         setCommentLoading(true);
         setError("");
         try {
-            const res = await fetch(`http://localhost:5000/api/agent/orders/${id}/comment`, {
+            const data = await api(`/api/agent/orders/${id}/comment`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ message: newComment }),
+                body: { message: newComment },
             });
-            if (!res.ok) throw new Error(`Comment failed ${res.status}`);
-            const data = await res.json();
             setRequest(data);
             setNewComment("");
         } catch (err) {

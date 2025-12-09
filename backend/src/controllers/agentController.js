@@ -1,7 +1,7 @@
 const Order = require("../models/orderModel");
 const { assertTransition, ORDER_STATUS } = require("../services/orderStateService");
 const { getIO } = require("../socket");
-const { normalizeItemImages } = require("../services/cloudinaryService");
+const { normalizeItemImages, uploadImages } = require("../services/cloudinaryService");
 
 const RESEARCH_LOCK_HOURS = 2;
 const TRACK_ALLOWED = [
@@ -153,9 +153,20 @@ async function addAgentComment(req, res) {
       return res.status(403).json({ message: "Энэ захиалга таны биш" });
     }
 
-    const { message } = req.body;
+    const { message, attachments = [] } = req.body;
     if (!message || !message.trim()) {
       return res.status(400).json({ message: "Сэтгэгдэл хоосон байж болохгүй" });
+    }
+
+    // Зурагнуудыг Cloudinary-д upload хийх
+    let uploadedAttachments = [];
+    if (Array.isArray(attachments) && attachments.length > 0) {
+      try {
+        uploadedAttachments = await uploadImages(attachments, { folder: "agentbuy/chat" });
+      } catch (uploadErr) {
+        console.error("Chat image upload error:", uploadErr);
+        // Upload алдаа гарвал зөвхөн текст илгээх
+      }
     }
 
     order.comments = order.comments || [];
@@ -163,6 +174,7 @@ async function addAgentComment(req, res) {
       senderId: req.user._id,
       senderRole: "agent",
       message: message.trim(),
+      attachments: uploadedAttachments,
     });
     await order.save();
 

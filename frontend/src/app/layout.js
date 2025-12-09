@@ -50,7 +50,7 @@ export default function RootLayout({ children }) {
   const viewIcon = view === "mobile" ? "📱" : view === "tablet" ? "📱" : "🖥️";
 
   return (
-    <html lang="mn">
+    <html lang="mn" data-scroll-behavior="smooth">
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />

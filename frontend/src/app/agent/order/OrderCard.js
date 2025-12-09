@@ -4,6 +4,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useUI } from "@/app/layout";
+import { api } from "@/lib/api";
 import Button from "@/components/ui/Button";
 
 const urgencyConfig = {
@@ -54,10 +55,9 @@ export default function OrderCard({ order }) {
         setClaimError("");
         setClaiming(true);
         try {
-            const res = await fetch(`http://localhost:5000/api/requests/${order.rawId}/claim`, {
+            await api(`/api/requests/${order.rawId}/claim`, {
                 method: "POST",
             });
-            if (!res.ok) throw new Error(`Claim failed ${res.status}`);
             window.location.href = `/agent/order/${order.rawId}`;
         } catch (err) {
             console.error(err);

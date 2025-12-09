@@ -3,7 +3,7 @@ const Cargo = require("../models/cargoModel");
 const { assertTransition, ORDER_STATUS } = require("../services/orderStateService");
 const { consumeOnPublish, returnOnCancel, completeBonus } = require("../services/cardService");
 const { getIO } = require("../socket");
-const { normalizeItemImages } = require("../services/cloudinaryService");
+const { normalizeItemImages, uploadImages } = require("../services/cloudinaryService");
 
 const ERR_NOT_FOUND = { message: "Захиалга олдсонгүй" };
 
@@ -21,7 +21,14 @@ async function createDraft(req, res) {
       return res.status(400).json({ message: "Карго олдсонгүй" });
     }
 
-    const normalizedItems = await normalizeItemImages(items);
+    let normalizedItems;
+    try {
+      normalizedItems = await normalizeItemImages(items);
+    } catch (err) {
+      console.error("Cloudinary upload error:", err);
+      // Cloudinary upload алдаа гарвал base64 string-тэй хадгалах
+      normalizedItems = items;
+    }
 
     const order = await Order.create({
       userId: req.user._id,
@@ -62,10 +69,14 @@ async function publishOrder(req, res) {
 }
 
 async function listUserOrders(req, res) {
-  const { status } = req.query;
+  const { status, limit = 50 } = req.query;
   const filter = { userId: req.user._id };
   if (status) filter.status = status;
-  const orders = await Order.find(filter).populate("cargoId").sort({ createdAt: -1 });
+  const orders = await Order.find(filter)
+    .populate("cargoId", "name")
+    .select("-items.images") // Зургийн base64 string-уудыг буцаахгүй (зөвхөн Cloudinary URL)
+    .sort({ createdAt: -1 })
+    .limit(Number(limit));
   res.json(orders);
 }
 
@@ -172,9 +183,20 @@ async function addComment(req, res) {
     const order = await Order.findOne({ _id: req.params.id, userId: req.user._id });
     if (!order) return res.status(404).json(ERR_NOT_FOUND);
 
-    const { message } = req.body;
+    const { message, attachments = [] } = req.body;
     if (!message || !message.trim()) {
       return res.status(400).json({ message: "Сэтгэгдэл хоосон байж болохгүй" });
+    }
+
+    // Зурагнуудыг Cloudinary-д upload хийх
+    let uploadedAttachments = [];
+    if (Array.isArray(attachments) && attachments.length > 0) {
+      try {
+        uploadedAttachments = await uploadImages(attachments, { folder: "agentbuy/chat" });
+      } catch (uploadErr) {
+        console.error("Chat image upload error:", uploadErr);
+        // Upload алдаа гарвал зөвхөн текст илгээх
+      }
     }
 
     order.comments = order.comments || [];
@@ -182,6 +204,7 @@ async function addComment(req, res) {
       senderId: req.user._id,
       senderRole: "user",
       message: message.trim(),
+      attachments: uploadedAttachments,
     });
     await order.save();
 
@@ -196,6 +219,120 @@ async function addComment(req, res) {
   }
 }
 
+async function updateOrderName(req, res) {
+  try {
+    const order = await Order.findOne({ _id: req.params.id, userId: req.user._id });
+    if (!order) return res.status(404).json(ERR_NOT_FOUND);
+
+    const { customName } = req.body;
+    order.customName = customName ? customName.trim() : null;
+    await order.save();
+
+    try {
+      getIO().emit("order:update", { orderId: order._id, order });
+    } catch (e) {}
+
+    res.json(order);
+  } catch (err) {
+    console.error("updateOrderName error", err);
+    res.status(500).json({ message: "Серверийн алдаа" });
+  }
+}
+
+async function updateDraft(req, res) {
+  try {
+    const order = await Order.findOne({ _id: req.params.id, userId: req.user._id });
+    if (!order) return res.status(404).json(ERR_NOT_FOUND);
+
+    // Зөвхөн ноорог захиалгыг засах боломжтой
+    if (order.status !== ORDER_STATUS.DRAFT) {
+      return res.status(400).json({ message: "Зөвхөн ноорог захиалгыг засах боломжтой" });
+    }
+
+    const { items, cargoId, userNote } = req.body;
+    
+    if (items && Array.isArray(items) && items.length > 0) {
+      let normalizedItems;
+      try {
+        normalizedItems = await normalizeItemImages(items);
+      } catch (err) {
+        console.error("Cloudinary upload error:", err);
+        normalizedItems = items;
+      }
+      order.items = normalizedItems;
+    }
+
+    if (cargoId) {
+      const cargo = await Cargo.findById(cargoId);
+      if (!cargo) {
+        return res.status(400).json({ message: "Карго олдсонгүй" });
+      }
+      order.cargoId = cargoId;
+    }
+
+    if (userNote !== undefined) {
+      order.userNote = userNote ? userNote.trim() : null;
+    }
+
+    await order.save();
+
+    try {
+      getIO().emit("order:update", { orderId: order._id, order });
+    } catch (e) {}
+
+    res.json(order);
+  } catch (err) {
+    console.error("updateDraft error", err);
+    res.status(500).json({ message: "Серверийн алдаа" });
+  }
+}
+
+async function deleteOrder(req, res) {
+  try {
+    console.log("[Delete] Received delete request for order:", req.params.id, "from user:", req.user._id);
+    const order = await Order.findOne({ _id: req.params.id, userId: req.user._id });
+    if (!order) {
+      console.log("[Delete] Order not found:", req.params.id);
+      return res.status(404).json(ERR_NOT_FOUND);
+    }
+
+    console.log("[Delete] Order found, status:", order.status);
+
+    // Зөвхөн цуцлагдсан статустай захиалгуудыг устгах боломжтой (PUBLISHED-ийг цуцлаад дараа нь устгана)
+    const deletableStatuses = [
+      ORDER_STATUS.CANCELLED_BY_USER,
+      ORDER_STATUS.CANCELLED_BY_ADMIN,
+      ORDER_STATUS.CANCELLED_NO_AGENT,
+      ORDER_STATUS.USER_REJECTED,
+      ORDER_STATUS.PAYMENT_EXPIRED,
+    ];
+
+    if (!deletableStatuses.includes(order.status)) {
+      console.log("[Delete] Status not deletable:", order.status);
+      return res.status(400).json({
+        message: `Энэ захиалгыг устгах боломжгүй. Зөвхөн нээлттэй эсвэл цуцлагдсан захиалгуудыг устгах боломжтой.`,
+      });
+    }
+
+    // Захиалгыг MongoDB-аас бүрэн устгах
+    console.log("[Delete] Deleting order from database...");
+    await Order.findByIdAndDelete(order._id);
+    console.log("[Delete] Order deleted successfully");
+
+    try {
+      getIO().emit("order:delete", { orderId: order._id });
+      console.log("[Delete] Socket event emitted");
+    } catch (e) {
+      console.error("Socket emit error:", e);
+    }
+
+    res.status(204).send();
+  } catch (err) {
+    console.error("deleteOrder error", err);
+    res.status(500).json({ message: "Серверийн алдаа" });
+  }
+}
+
 module.exports = {
   createDraft,
   publishOrder,
@@ -206,4 +343,7 @@ module.exports = {
   acceptReport,
   confirmCompleted,
   addComment,
+  updateOrderName,
+  updateDraft,
+  deleteOrder,
 };

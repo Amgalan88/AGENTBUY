@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -15,6 +15,7 @@ function LoginForm() {
   const [remember, setRemember] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [autoLoginAttempted, setAutoLoginAttempted] = useState(false);
 
   const redirectByRole = (user) => {
     if (user?.roles?.includes("admin") || user?.roles?.includes("super_admin")) {
@@ -27,6 +28,28 @@ function LoginForm() {
   };
 
   const prefRole = searchParams.get("role");
+
+  // Auto-login функц - "Намайг сана" checkbox идэвхжүүлсэн бол
+  useEffect(() => {
+    const autoLogin = async () => {
+      if (autoLoginAttempted) return;
+      setAutoLoginAttempted(true);
+
+      try {
+        // Cookie-оос token-ийг шалгах (API call нь cookie-г ашиглана)
+        const user = await api("/api/auth/me");
+        if (user && user._id) {
+          // Cookie байгаа, хэрэглэгч аль хэдийн нэвтэрсэн
+          redirectByRole(user);
+        }
+      } catch (err) {
+        // Cookie байхгүй эсвэл хүчингүй - хэвийн login хийх
+        // Алдааг гаргахгүй, зөвхөн auto-login хийхгүй
+      }
+    };
+
+    autoLogin();
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

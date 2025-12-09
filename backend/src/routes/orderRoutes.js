@@ -9,6 +9,9 @@ const {
   acceptReport,
   confirmCompleted,
   addComment,
+  updateOrderName,
+  updateDraft,
+  deleteOrder,
 } = require("../controllers/orderController");
 const { authRequired, requireRole } = require("../middlewares/auth");
 const { ROLES } = require("../constants/roles");
@@ -27,6 +30,9 @@ router.post("/:id/cancel-after-report", authRequired, requireRole(...userAllowed
 router.post("/:id/request-order", authRequired, requireRole(...userAllowed), orderIdValidation, acceptReport);
 router.post("/:id/complete", authRequired, requireRole(...userAllowed), orderIdValidation, confirmCompleted);
 router.post("/:id/comment", authRequired, requireRole(...userAllowed), orderIdValidation, addComment);
+router.patch("/:id/name", authRequired, requireRole(...userAllowed), orderIdValidation, updateOrderName);
+router.put("/:id/draft", authRequired, requireRole(...userAllowed), orderIdValidation, updateDraft);
+router.delete("/:id", authRequired, requireRole(...userAllowed), orderIdValidation, deleteOrder);
 
 module.exports = router;
 

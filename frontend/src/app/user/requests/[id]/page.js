@@ -112,13 +112,13 @@ export default function UserOrderDetailPage() {
     }
   };
 
-  const sendComment = async (orderId, message) => {
+  const sendComment = async (orderId, message, attachments = []) => {
     setCommentLoading(true);
     setError("");
     try {
       const updated = await api(`/api/orders/${id}/comment`, {
         method: "POST",
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({ message, attachments }),
       });
       setOrder(updated);
     } catch (err) {

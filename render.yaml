@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: agentbuy-backend
+    env: node
+    plan: free # эсвэл starter, standard (таны plan-аас хамаарна)
+    buildCommand: cd backend && npm install
+    startCommand: cd backend && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        fromService:
+          type: web
+          name: agentbuy-backend
+          property: port
+      - key: MONGO_URI
+        sync: false # Render дээр Environment Variables-аас оруулах
+      - key: JWT_SECRET
+        sync: false # Render дээр Environment Variables-аас оруулах (ЗААВАЛ ӨӨРЧЛӨХ!)
+      - key: CLIENT_URL
+        value: https://agentbuy.mn,https://www.agentbuy.mn
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: CLOUDINARY_FOLDER
+        value: agentbuy
+

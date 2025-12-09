@@ -56,32 +56,59 @@ async function performUpload(file, options = {}) {
     body = { raw: bodyText };
   }
   if (!response.ok) {
+    console.error("[Cloudinary] Upload failed - Status:", response.status);
+    console.error("[Cloudinary] Response body:", bodyText);
     throw new Error(body?.error?.message || body?.raw || `Cloudinary upload failed (${response.status})`);
   }
-  return body?.secure_url || body?.url || file;
+  const cloudinaryUrl = body?.secure_url || body?.url;
+  if (!cloudinaryUrl || (!cloudinaryUrl.startsWith("http://") && !cloudinaryUrl.startsWith("https://"))) {
+    console.error("[Cloudinary] Invalid URL returned:", cloudinaryUrl);
+    throw new Error("Cloudinary URL буруу формат");
+  }
+  return cloudinaryUrl;
 }
 
 async function uploadImage(value, options = {}) {
-  if (!shouldUpload(value)) return value;
+  if (!shouldUpload(value)) {
+    // Base64 биш, аль хэдийн URL эсвэл бусад format байвал буцаах
+    return value;
+  }
   if (!ENABLED) {
-    console.warn("Cloudinary is not configured. Returning raw image payload.");
+    console.warn("[Cloudinary] Cloudinary is not configured. Returning raw image payload.");
     return value;
   }
   try {
-    console.log("[Cloudinary] Uploading image...");
+    console.log("[Cloudinary] Uploading image... (base64 length:", value.length, ")");
     const result = await performUpload(value, options);
-    console.log("[Cloudinary] ✅ Upload successful:", result);
-    return result;
+    if (result && result.startsWith("http")) {
+      console.log("[Cloudinary] ✅ Upload successful, URL:", result);
+      return result;
+    } else {
+      console.error("[Cloudinary] ❌ Invalid URL returned:", result);
+      throw new Error("Cloudinary URL буруу формат");
+    }
   } catch (err) {
     console.error("[Cloudinary] ❌ Upload error:", err.message);
-    return value;
+    // Алдаа гарвал base64 string буцаахгүй, алдаа throw хийх (эсвэл fallback хийх)
+    throw err; // Алдааг throw хийх, тиймээс frontend дээр алдаа мэдэгдэх
   }
 }
 
 async function uploadImages(values = [], options = {}) {
   if (!Array.isArray(values) || !values.length) return values || [];
-  const uploaded = await Promise.all(values.map((img) => uploadImage(img, options)));
-  return uploaded.filter(Boolean);
+  const uploaded = await Promise.all(
+    values.map(async (img) => {
+      try {
+        return await uploadImage(img, options);
+      } catch (err) {
+        console.error("[Cloudinary] Failed to upload image in batch:", err.message);
+        // Batch upload дээр алдаа гарвал null буцаах, дараа нь filter хийх
+        return null;
+      }
+    })
+  );
+  // Null-уудыг шүүх, мөн base64 string-уудыг шүүх (зөвхөн URL үлдээх)
+  return uploaded.filter((url) => url && (url.startsWith("http://") || url.startsWith("https://")));
 }
 
 async function normalizeItemImages(items = [], options = {}) {

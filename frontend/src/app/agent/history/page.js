@@ -91,12 +91,12 @@ export default function AgentHistoryPage() {
     return mapped.filter((o) => o.status === activeTab);
   }, [orders, activeTab]);
 
-  const sendComment = async (orderId, message) => {
+  const sendComment = async (orderId, message, attachments = []) => {
     setChatLoading(orderId);
     try {
       const updated = await api(`/api/agent/orders/${orderId}/comment`, {
         method: "POST",
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({ message, attachments }),
       });
       setOrders(prev => prev.map(o => o._id === orderId ? updated : o));
     } catch {

@@ -27,12 +27,12 @@ const app = express();
 const httpServer = http.createServer(app);
 
 const ALLOWED_ORIGINS = (process.env.CLIENT_URL ||
-  "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://localhost:3002,https://agentbuy.mn,https://www.agentbuy.mn,https://agentbuy.vercel.app")
+  "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://localhost:3002,https://agentbuy.mn,https://www.agentbuy.mn,https://agentbuy.vercel.app,https://agentbuy.onrender.com")
   .split(",")
   .map((o) => o.trim())
   .filter(Boolean);
 
-app.use(express.json({ limit: "1mb" }));
+app.use(express.json({ limit: "10mb" })); // Зургийн base64 илгээхэд илүү том limit
 app.set("trust proxy", 1); // Render proxy-г итгэх
 app.use(cookieParser());
 app.use(
@@ -43,6 +43,8 @@ app.use(
       return cb(new Error("Not allowed by CORS"));
     },
     credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 

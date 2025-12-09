@@ -33,6 +33,8 @@ function BatchOrderForm() {
   const [successId, setSuccessId] = useState("");
   const [savingDefault, setSavingDefault] = useState(false);
   const [previewImage, setPreviewImage] = useState("");
+  const [draftOrderId, setDraftOrderId] = useState(null);
+  const [autoSaving, setAutoSaving] = useState(false);
 
   const mainClass =
     theme === "night"
@@ -79,10 +81,32 @@ function BatchOrderForm() {
       setLoading(true);
       setError("");
       try {
-        const [cargoData, profile] = await Promise.all([api("/api/user/cargos"), api("/api/auth/me")]);
+        const editId = searchParams.get("edit");
+        const results = await Promise.all([
+          api("/api/user/cargos"),
+          api("/api/auth/me"),
+          ...(editId ? [api(`/api/orders/${editId}`)] : []),
+        ]);
         if (!alive) return;
+        
+        const cargoData = results[0];
+        const profile = results[1];
         setCargos(cargoData);
         setDefaultCargoId(profile?.defaultCargoId || "");
+        
+        // Edit mode - ноорог захиалга ачаалах
+        if (editId && results[2] && results[2].status === "DRAFT") {
+          const order = results[2];
+          setDraftOrderId(order._id);
+          setSelectedCargo(order.cargoId?._id || order.cargoId || "");
+          setItems(order.items || [emptyItem()]);
+          if (order.items && order.items.length > 0) {
+            setCurrentIndex(order.items.length - 1);
+          }
+          setLoading(false);
+          return;
+        }
+        
         const fromQuery = searchParams.get("cargo");
         if (fromQuery && cargoData.find((c) => c._id === fromQuery)) {
           setSelectedCargo(fromQuery);
@@ -138,6 +162,80 @@ function BatchOrderForm() {
     setCurrentIndex(0);
   };
 
+  // Автоматаар ноорог хадгалах функц
+  const autoSaveDraft = async () => {
+    if (!selectedCargo || items.length === 0 || items.every((it) => !it.title.trim())) {
+      return; // Хоосон эсвэл хэт бага мэдээлэл байвал хадгалахгүй
+    }
+
+    try {
+      const payloadItems = items
+        .filter((it) => it.title.trim()) // Хоосон мөрүүдийг хас
+        .map((it) => ({
+          title: it.title.trim(),
+          quantity: Number(it.quantity) || 1,
+          app: it.app,
+          userNotes: it.userNotes || undefined,
+          sourceUrl: it.sourceUrl || undefined,
+          images: it.images || [],
+        }));
+
+      if (payloadItems.length === 0) return;
+
+      if (draftOrderId) {
+        // Одоогийн ноорог захиалгыг шинэчлэх
+        await api(`/api/orders/${draftOrderId}/draft`, {
+          method: "PUT",
+          body: JSON.stringify({
+            cargoId: selectedCargo,
+            items: payloadItems,
+          }),
+        });
+      } else {
+        // Шинэ ноорог үүсгэх
+        const created = await api("/api/orders", {
+          method: "POST",
+          body: JSON.stringify({
+            cargoId: selectedCargo,
+            isPackage: true,
+            items: payloadItems,
+          }),
+        });
+        setDraftOrderId(created._id);
+      }
+    } catch (err) {
+      console.error("Auto-save draft error:", err);
+      // Auto-save алдааг silent хийх
+    }
+  };
+
+  // beforeunload event - хуудас хаахад ноорог хадгалах
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (selectedCargo && items.some((it) => it.title.trim())) {
+        autoSaveDraft();
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [selectedCargo, items, draftOrderId]);
+
+  // Автоматаар ноорог хадгалах (debounce)
+  useEffect(() => {
+    if (!selectedCargo || items.length === 0) return;
+
+    const timeoutId = setTimeout(() => {
+      autoSaveDraft();
+    }, 3000); // 3 секундын дараа автоматаар хадгалах
+
+    return () => clearTimeout(timeoutId);
+  }, [items, selectedCargo]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
@@ -160,15 +258,33 @@ function BatchOrderForm() {
         sourceUrl: it.sourceUrl || undefined,
         images: it.images,
       }));
-      const created = await api("/api/orders", {
-        method: "POST",
-        body: JSON.stringify({
-          cargoId: selectedCargo,
-          isPackage: true,
-          items: payloadItems,
-        }),
-      });
-      await api(`/api/orders/${created._id}/publish`, { method: "POST" });
+
+      let orderId = draftOrderId;
+      
+      // Ноорог байгаа бол шинэчлэх, байхгүй бол үүсгэх
+      if (orderId) {
+        await api(`/api/orders/${orderId}/draft`, {
+          method: "PUT",
+          body: JSON.stringify({
+            cargoId: selectedCargo,
+            items: payloadItems,
+          }),
+        });
+      } else {
+        const created = await api("/api/orders", {
+          method: "POST",
+          body: JSON.stringify({
+            cargoId: selectedCargo,
+            isPackage: true,
+            items: payloadItems,
+          }),
+        });
+        orderId = created._id;
+      }
+
+      // Нийтлэх
+      await api(`/api/orders/${orderId}/publish`, { method: "POST" });
+      
       if (selectedCargo) {
         await api("/api/user/default-cargo", {
           method: "POST",
@@ -176,9 +292,10 @@ function BatchOrderForm() {
         });
         setDefaultCargoId(selectedCargo);
       }
-      setSuccessId(created._id);
+      setSuccessId(orderId);
       setItems([emptyItem()]);
       setCurrentIndex(0);
+      setDraftOrderId(null);
     } catch (err) {
       setError(err.message || "Захиалга үүсгэж чадсангүй");
     } finally {

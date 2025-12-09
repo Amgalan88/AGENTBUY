@@ -22,6 +22,7 @@ const orderSchema = new mongoose.Schema(
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     agentId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     cargoId: { type: mongoose.Schema.Types.ObjectId, ref: "Cargo" },
+    customName: { type: String }, // Хэрэглэгчийн өөрийн нэр
     status: {
       type: String,
       enum: Object.values(ORDER_STATUS),
@@ -92,6 +93,7 @@ const orderSchema = new mongoose.Schema(
         senderId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
         senderRole: { type: String, enum: ["user", "agent"] },
         message: { type: String, required: true },
+        attachments: [{ type: String }], // Зурагнууд (Cloudinary URL)
         createdAt: { type: Date, default: Date.now },
       },
     ],
