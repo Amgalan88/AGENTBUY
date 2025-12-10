@@ -7,6 +7,7 @@ const {
   startResearch,
   submitReport,
   updateTracking,
+  updateItemTracking,
   addAgentComment,
 } = require("../controllers/agentController");
 const { authRequired, requireRole, ensureAgentVerified } = require("../middlewares/auth");
@@ -23,6 +24,7 @@ router.post("/orders/:id/lock", authRequired, requireRole(...agentOnly), ensureA
 router.post("/orders/:id/start", authRequired, requireRole(...agentOnly), ensureAgentVerified, orderIdValidation, startResearch);
 router.post("/orders/:id/report", authRequired, requireRole(...agentOnly), ensureAgentVerified, submitReportValidation, submitReport);
 router.post("/orders/:id/tracking", authRequired, requireRole(...agentOnly), ensureAgentVerified, trackingValidation, updateTracking);
+router.post("/orders/:id/item-tracking", authRequired, requireRole(...agentOnly), ensureAgentVerified, orderIdValidation, updateItemTracking);
 router.post("/orders/:id/comment", authRequired, requireRole(...agentOnly), ensureAgentVerified, orderIdValidation, addAgentComment);
 
 module.exports = router;

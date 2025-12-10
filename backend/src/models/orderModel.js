@@ -13,6 +13,7 @@ const orderItemSchema = new mongoose.Schema(
     agentCurrency: { type: String, default: "CNY" },
     agentTotal: { type: Number },
     packageIndex: { type: Number },
+    trackingCode: { type: String },
   },
   { _id: false }
 );
@@ -74,6 +75,7 @@ const orderSchema = new mongoose.Schema(
         agentTotal: { type: Number },
         note: { type: String },
         images: [{ type: String }],
+        trackingCode: { type: String },
       },
     ],
     pricing: {

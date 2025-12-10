@@ -26,7 +26,10 @@ function signParams(params) {
 }
 
 async function performUpload(file, options = {}) {
-  if (!ENABLED) return file;
+  if (!ENABLED) {
+    console.warn("[Cloudinary] Cloudinary is not configured. Skipping upload.");
+    return null; // Cloudinary тохируулагдаагүй бол null буцаана
+  }
   const folder = options.folder || DEFAULT_FOLDER;
   const url = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`;
   const payload = new URLSearchParams();
@@ -44,28 +47,33 @@ async function performUpload(file, options = {}) {
     payload.append("signature", signParams(toSign));
   }
 
-  const response = await fetch(url, {
-    method: "POST",
-    body: payload,
-  });
-  const bodyText = await response.text();
-  let body;
   try {
-    body = JSON.parse(bodyText);
-  } catch {
-    body = { raw: bodyText };
+    const response = await fetch(url, {
+      method: "POST",
+      body: payload,
+    });
+    const bodyText = await response.text();
+    let body;
+    try {
+      body = JSON.parse(bodyText);
+    } catch {
+      body = { raw: bodyText };
+    }
+    if (!response.ok) {
+      console.error("[Cloudinary] Upload failed - Status:", response.status);
+      console.error("[Cloudinary] Response body:", bodyText);
+      throw new Error(body?.error?.message || body?.raw || `Cloudinary upload failed (${response.status})`);
+    }
+    const cloudinaryUrl = body?.secure_url || body?.url;
+    if (!cloudinaryUrl || (!cloudinaryUrl.startsWith("http://") && !cloudinaryUrl.startsWith("https://"))) {
+      console.error("[Cloudinary] Invalid URL returned:", cloudinaryUrl);
+      throw new Error("Cloudinary URL буруу формат");
+    }
+    return cloudinaryUrl;
+  } catch (err) {
+    console.error("[Cloudinary] performUpload error:", err.message);
+    throw err;
   }
-  if (!response.ok) {
-    console.error("[Cloudinary] Upload failed - Status:", response.status);
-    console.error("[Cloudinary] Response body:", bodyText);
-    throw new Error(body?.error?.message || body?.raw || `Cloudinary upload failed (${response.status})`);
-  }
-  const cloudinaryUrl = body?.secure_url || body?.url;
-  if (!cloudinaryUrl || (!cloudinaryUrl.startsWith("http://") && !cloudinaryUrl.startsWith("https://"))) {
-    console.error("[Cloudinary] Invalid URL returned:", cloudinaryUrl);
-    throw new Error("Cloudinary URL буруу формат");
-  }
-  return cloudinaryUrl;
 }
 
 async function uploadImage(value, options = {}) {

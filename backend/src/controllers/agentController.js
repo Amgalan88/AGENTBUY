@@ -173,6 +173,37 @@ async function updateTracking(req, res) {
   }
 }
 
+async function updateItemTracking(req, res) {
+  try {
+    const { itemIndex, code } = req.body;
+    const order = await Order.findById(req.params.id);
+    if (!order) return res.status(404).json({ message: "Захиалга олдсонгүй" });
+    if (!order.agentId?.equals(req.user._id)) return res.status(403).json({ message: "Энэ захиалга таны биш" });
+    if (!TRACK_ALLOWED.includes(order.status)) {
+      return res.status(400).json({ 
+        message: `Энэ төлөвт tracking оруулах боломжгүй. Төлөв: ${order.status}` 
+      });
+    }
+    if (!order.report || !order.report.items || !Array.isArray(order.report.items)) {
+      return res.status(400).json({ message: "Тайлан олдсонгүй" });
+    }
+    if (itemIndex < 0 || itemIndex >= order.report.items.length) {
+      return res.status(400).json({ message: "Буруу барааны индекс" });
+    }
+    
+    order.report.items[itemIndex].trackingCode = code || "";
+    await order.save();
+    const populated = await Order.findById(order._id).populate("cargoId");
+    try {
+      getIO().emit("order:update", { orderId: populated._id, status: populated.status });
+    } catch (e) {}
+    res.json(populated);
+  } catch (err) {
+    console.error("agent updateItemTracking error", err);
+    res.status(500).json({ message: "Tracking код хадгалах үед алдаа гарлаа." });
+  }
+}
+
 async function addAgentComment(req, res) {
   try {
     const order = await Order.findById(req.params.id);
@@ -228,5 +259,6 @@ module.exports = {
   startResearch,
   submitReport,
   updateTracking,
+  updateItemTracking,
   addAgentComment,
 };

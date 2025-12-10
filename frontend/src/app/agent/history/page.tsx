@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, ChangeEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { getSocket } from "@/lib/socket";
@@ -70,9 +70,6 @@ export default function AgentHistoryPage(): React.JSX.Element {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>("");
   const [chatLoading, setChatLoading] = useState<string>("");
-  const [trackingInputs, setTrackingInputs] = useState<Record<string, string>>({});
-  const [trackingLoading, setTrackingLoading] = useState<string>("");
-  const [editingTracking, setEditingTracking] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     let alive = true;
@@ -107,7 +104,15 @@ export default function AgentHistoryPage(): React.JSX.Element {
     const mapped = orders.map((o) => {
       const totalQty = o.items?.reduce((s, it) => s + (it.quantity || 0), 0) || 0;
       const firstItem = o.items?.[0];
-      const firstTitle = firstItem?.title || "Барааны нэр ороогүй";
+      
+      // Бүх барааны нэрийг нэгтгэх
+      const itemTitles = (o.items || [])
+        .map((it) => it.title || "Бараа")
+        .filter((title) => title && title.trim() !== "");
+      const firstTitle = itemTitles.length > 0 
+        ? (itemTitles.length > 1 ? itemTitles.join(" · ") : itemTitles[0])
+        : "Барааны нэр ороогүй";
+      
       const rawImages = firstItem?.images || (firstItem?.imageUrl ? [firstItem.imageUrl] : []);
       const validImages = rawImages.filter((img): img is string => 
         img && 
@@ -143,43 +148,6 @@ export default function AgentHistoryPage(): React.JSX.Element {
     }
   };
 
-  const saveTracking = async (orderId: string): Promise<void> => {
-    const code = trackingInputs[orderId]?.trim();
-    if (!code) {
-      setError("Tracking код оруулна уу");
-      return;
-    }
-    setTrackingLoading(orderId);
-    setError("");
-    try {
-      const updated = await api<Order>(`/api/agent/orders/${orderId}/tracking`, {
-        method: "POST",
-        body: { code },
-      });
-      setOrders(prev => prev.map(o => o._id === orderId ? updated : o));
-      // Input цэвэрлэх
-      setTrackingInputs(prev => {
-        const next = { ...prev };
-        delete next[orderId];
-        return next;
-      });
-      // Засах горимыг хаах
-      setEditingTracking(prev => {
-        const next = { ...prev };
-        delete next[orderId];
-        return next;
-      });
-    } catch (err) {
-      const error = err as Error & { status?: number; message?: string };
-      if (error.status === 400) {
-        setError(error.message || "Энэ төлөвт tracking оруулах боломжгүй");
-      } else {
-        setError(error.message || "Tracking код хадгалах алдаа");
-      }
-    } finally {
-      setTrackingLoading("");
-    }
-  };
 
   return (
     <main className="page-container has-mobile-nav">
@@ -265,49 +233,33 @@ export default function AgentHistoryPage(): React.JSX.Element {
                         <span>🔢 {order.totalQty} ширхэг</span>
                       </div>
                       
-                      {/* Tracking Code Input - For successful orders (Амжилттай захиалга) */}
+                      {/* Tracking Code Display - Only show tracking codes entered in detail page */}
                       {["PAYMENT_CONFIRMED", "ORDER_PLACED", "CARGO_IN_TRANSIT", "ARRIVED_AT_CARGO", "COMPLETED"].includes(order.status) && (
                         <div className="mb-2">
-                          {typeof order.tracking === "object" && order.tracking?.code && !editingTracking[order._id] ? (
+                          {/* Order-level tracking код */}
+                          {typeof order.tracking === "object" && order.tracking?.code ? (
                             <div className="flex items-center gap-2">
                               <p className="text-xs text-muted">
                                 <span className="font-medium">Tracking код:</span> {order.tracking.code}
                               </p>
-                              <Button
-                                onClick={() => {
-                                  setEditingTracking(prev => ({ ...prev, [order._id]: true }));
-                                  const trackingCode = typeof order.tracking === "object" && order.tracking?.code ? order.tracking.code : "";
-                                  setTrackingInputs(prev => ({ ...prev, [order._id]: trackingCode }));
-                                }}
-                                size="sm"
-                                variant="ghost"
-                                className="text-xs px-2 py-1 h-auto"
-                              >
-                                Засах
-                              </Button>
                             </div>
                           ) : (
-                            <div className="flex gap-2 items-center">
-                              <input
-                                type="text"
-                                value={trackingInputs[order._id] || ""}
-                                onChange={(e: ChangeEvent<HTMLInputElement>) => {
-                                  setTrackingInputs(prev => ({ ...prev, [order._id]: e.target.value }));
-                                }}
-                                placeholder="Tracking код"
-                                className="flex-1 text-xs px-2 py-1.5 rounded-lg border border-surface-card-border bg-surface-card text-primary"
-                                disabled={trackingLoading === order._id}
-                              />
-                              <Button
-                                onClick={() => saveTracking(order._id)}
-                                loading={trackingLoading === order._id}
-                                size="sm"
-                                variant="secondary"
-                                className="text-xs whitespace-nowrap"
-                              >
-                                Хадгалах
-                              </Button>
-                            </div>
+                            /* Item-level tracking код-ууд (report-ийн items-аас) */
+                            order.report?.items && Array.isArray(order.report.items) && (() => {
+                              const itemTrackings = order.report.items
+                                .map((rItem: { trackingCode?: string }) => rItem.trackingCode)
+                                .filter((tc: string | undefined): tc is string => !!tc && tc.trim() !== "");
+                              if (itemTrackings.length > 0) {
+                                return (
+                                  <div className="flex items-center gap-2">
+                                    <p className="text-xs text-muted">
+                                      <span className="font-medium">Tracking код:</span> {itemTrackings.join(", ")}
+                                    </p>
+                                  </div>
+                                );
+                              }
+                              return null;
+                            })()
                           )}
                         </div>
                       )}

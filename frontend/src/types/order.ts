@@ -14,6 +14,7 @@ export interface OrderItem {
   agentTotal?: number;
   packageIndex?: number;
   app?: string;
+  trackingCode?: string;
 }
 
 export interface OrderComment {

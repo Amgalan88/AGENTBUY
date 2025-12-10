@@ -108,7 +108,15 @@ export default function AgentPage(): React.JSX.Element {
       orders.map((o) => {
         const totalQty = o.items?.reduce((s, it) => s + (it.quantity || 0), 0) || 0;
         const firstItem = o.items?.[0];
-        const firstTitle = firstItem?.title || "Барааны нэр ороогүй";
+        
+        // Бүх барааны нэрийг нэгтгэх
+        const itemTitles = (o.items || [])
+          .map((it) => it.title || "Бараа")
+          .filter((title) => title && title.trim() !== "");
+        const firstTitle = itemTitles.length > 0 
+          ? (itemTitles.length > 1 ? itemTitles.join(" · ") : itemTitles[0])
+          : "Барааны нэр ороогүй";
+        
         const rawImages = firstItem?.images || (firstItem?.imageUrl ? [firstItem.imageUrl] : []);
         const validImages = rawImages.filter((img): img is string => 
           img && 

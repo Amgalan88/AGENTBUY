@@ -245,7 +245,6 @@ export default function UserRequestsPage(): React.JSX.Element {
     () =>
       orders.map((o) => {
         const totalQty = o.items?.reduce((s, it) => s + (it.quantity || 0), 0) || 0;
-        const firstTitle = o.items?.[0]?.title || "Бараа";
         const firstImage = o.items?.[0]?.images?.[0] || o.items?.[0]?.imageUrl;
         
         const thumb = (firstImage && 
@@ -256,8 +255,30 @@ export default function UserRequestsPage(): React.JSX.Element {
           ? firstImage 
           : "/marketplace/taobao.png";
         
+        // Бүх барааны нэрийг нэгтгэх
+        const itemTitles = (o.items || [])
+          .map((it) => it.title || "Бараа")
+          .filter((title) => title && title.trim() !== "");
+        const firstTitle = itemTitles.length > 0 
+          ? (itemTitles.length > 1 ? itemTitles.join(" · ") : itemTitles[0])
+          : "Бараа";
+        
         const isPaid = ["PAYMENT_CONFIRMED", "ORDER_PLACED", "CARGO_IN_TRANSIT", "ARRIVED_AT_CARGO", "COMPLETED"].includes(o.status);
-        const tracking = (typeof o.tracking === "object" && o.tracking?.code) || (typeof o.tracking === "string" ? o.tracking : "") || "";
+        
+        // Order-level tracking код эсвэл report-ийн item-level tracking код-ууд
+        let tracking = (typeof o.tracking === "object" && o.tracking?.code) || (typeof o.tracking === "string" ? o.tracking : "") || "";
+        
+        // Batch захиалгын хувьд report-ийн item-level tracking код-уудыг авах
+        if (!tracking && o.report && o.report.items && Array.isArray(o.report.items)) {
+          const itemTrackings = o.report.items
+            .map((rItem: { trackingCode?: string }) => rItem.trackingCode)
+            .filter((tc: string | undefined): tc is string => !!tc && tc.trim() !== "");
+          if (itemTrackings.length > 0) {
+            // Бүх tracking код-уудыг нэгтгэх
+            tracking = itemTrackings.join(", ");
+          }
+        }
+        
         const cargoName = (typeof o.cargoId === "object" && o.cargoId?.name) || "Карго";
         const agentCommentCount = (o.comments || []).filter(c => c.senderRole === "agent").length;
         const priceCny = o.report?.pricing?.grandTotalCny || null;
@@ -445,9 +466,9 @@ export default function UserRequestsPage(): React.JSX.Element {
                       
                       <Link 
                         href={`/user/requests/${order._id}`}
-                        className="text-sm sm:text-base font-semibold mb-2 hover:text-primary transition-colors line-clamp-2"
+                        className="text-sm sm:text-base font-semibold mb-2 hover:text-primary transition-colors line-clamp-3"
                       >
-                        {order.items?.map((it) => `${it.title || "Бараа"} ×${it.quantity || 1}`).join(" · ") || "Захиалга"}
+                        {order.firstTitle}
                       </Link>
                       
                       {(order.userNote || order.agentNote) && (
@@ -516,17 +537,6 @@ export default function UserRequestsPage(): React.JSX.Element {
                             </>
                           ) : (
                             <span className="text-sm text-muted">Үнэ тодорхойгүй</span>
-                          )}
-                          {(order.report as { paymentLink?: string })?.paymentLink && (
-                            <a
-                              href={(order.report as { paymentLink?: string }).paymentLink}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-xs text-accent-primary hover:underline line-clamp-1 max-w-[200px]"
-                              title={(order.report as { paymentLink?: string }).paymentLink}
-                            >
-                              💳 Төлбөрийн холбоос
-                            </a>
                           )}
                         </div>
                         

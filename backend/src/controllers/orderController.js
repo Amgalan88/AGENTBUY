@@ -287,9 +287,32 @@ async function updateDraft(req, res) {
     const { items, cargoId, userNote } = req.body;
     
     if (items && Array.isArray(items) && items.length > 0) {
-      // Cloudinary-д зураг upload хийх (зөвхөн Cloudinary URL-уудыг хадгалах)
-      const normalizedItems = await normalizeItemImages(items);
-      order.items = normalizedItems;
+      try {
+        // Cloudinary-д зураг upload хийх (зөвхөн Cloudinary URL-уудыг хадгалах)
+        const normalizedItems = await normalizeItemImages(items, { folder: "agentbuy/orders" });
+        order.items = normalizedItems;
+      } catch (uploadErr) {
+        console.error("updateDraft: normalizeItemImages error", uploadErr);
+        // Зураг upload хийхэд алдаа гарвал items-ийг шууд хадгалах (base64-г хадгалахгүй)
+        // Гэхдээ base64-г filter хийх
+        const filteredItems = items.map(item => {
+          const filtered = { ...item };
+          if (Array.isArray(filtered.images)) {
+            filtered.images = filtered.images.filter(img => 
+              img && 
+              typeof img === "string" && 
+              img.trim() !== "" &&
+              !img.startsWith("data:") &&
+              (img.startsWith("http://") || img.startsWith("https://"))
+            );
+          }
+          if (filtered.imageUrl && typeof filtered.imageUrl === "string" && filtered.imageUrl.startsWith("data:")) {
+            delete filtered.imageUrl;
+          }
+          return filtered;
+        });
+        order.items = filteredItems;
+      }
     }
 
     if (cargoId) {
@@ -313,7 +336,7 @@ async function updateDraft(req, res) {
     res.json(order);
   } catch (err) {
     console.error("updateDraft error", err);
-    res.status(500).json({ message: "Серверийн алдаа" });
+    res.status(500).json({ message: err.message || "Серверийн алдаа" });
   }
 }
 

@@ -215,36 +215,69 @@ export default function UserOrderDetailPage(): React.JSX.Element {
                         !img.startsWith("data:") &&
                         (img.startsWith("http://") || img.startsWith("https://"))
                       );
+                      // Report-ийн item-level tracking код олох (агентын оруулсан)
+                      const itemTrackingCode = order?.report?.items?.[idx]?.trackingCode;
                       return (
                         <div key={idx} className="surface-muted rounded-xl p-3 flex justify-between gap-3">
                           <div className="space-y-1 flex-1 min-w-0">
                             <p className="font-semibold text-sm">#{idx + 1} {item.title || "Бараа"}</p>
                             <p className="text-xs text-secondary">Тоо: {item.quantity || 1}</p>
                             {item.userNotes && <p className="text-xs text-secondary">📝 {item.userNotes}</p>}
+                            {itemTrackingCode && (
+                              <div className="mt-1">
+                                <span className="text-xs text-muted">Tracking: </span>
+                                <button
+                                  onClick={async (e) => {
+                                    try {
+                                      await navigator.clipboard.writeText(itemTrackingCode);
+                                      const btn = e.target as HTMLElement;
+                                      const originalText = btn.textContent;
+                                      btn.textContent = "✓ Хуулсан!";
+                                      setTimeout(() => {
+                                        if (btn.textContent) {
+                                          btn.textContent = originalText;
+                                        }
+                                      }, 2000);
+                                    } catch (err) {
+                                      alert("Хуулах боломжгүй");
+                                    }
+                                  }}
+                                  className="chip-success text-xs font-semibold px-2 py-0.5 rounded-full hover:opacity-80 transition-opacity cursor-pointer"
+                                  title="Tracking код хуулах"
+                                >
+                                  📦 {itemTrackingCode}
+                                </button>
+                              </div>
+                            )}
                             {item.sourceUrl && (
                               <a href={item.sourceUrl} target="_blank" rel="noreferrer" className="link-primary text-xs">
                                 🔗 Линк
                               </a>
                             )}
                           </div>
-                          {imgs[0] && (
-                            <div
-                              className="w-12 h-12 sm:w-14 sm:h-14 rounded-lg overflow-hidden surface-card cursor-pointer shrink-0"
-                              onClick={() => setPreviewImage(imgs[0])}
-                            >
-                              <img 
-                                src={imgs[0]} 
-                                alt={item.title} 
-                                className="img-cover"
-                                onError={(e) => {
-                                  const target = e.target as HTMLImageElement;
-                                  if (imgs[0] && imgs[0].startsWith("data:")) {
-                                    target.src = "/marketplace/taobao.png";
-                                  } else {
-                                    target.style.display = "none";
-                                  }
-                                }}
-                              />
+                          {imgs.length > 0 && (
+                            <div className="flex gap-1 flex-wrap shrink-0">
+                              {imgs.map((img, imgIdx) => (
+                                <div
+                                  key={imgIdx}
+                                  className="w-12 h-12 sm:w-14 sm:h-14 rounded-lg overflow-hidden surface-card cursor-pointer"
+                                  onClick={() => setPreviewImage(img)}
+                                >
+                                  <img
+                                    src={img}
+                                    alt={`${item.title} ${imgIdx + 1}`}
+                                    className="img-cover"
+                                    onError={(e) => {
+                                      const target = e.target as HTMLImageElement;
+                                      if (img && img.startsWith("data:")) {
+                                        target.src = "/marketplace/taobao.png";
+                                      } else {
+                                        target.style.display = "none";
+                                      }
+                                    }}
+                                  />
+                                </div>
+                              ))}
                             </div>
                           )}
                         </div>
@@ -267,19 +300,6 @@ export default function UserOrderDetailPage(): React.JSX.Element {
                       <p className="text-xs text-muted">Нийт дүн</p>
                       <p className="text-lg font-semibold">{totalPriceCny ?? "-"} CNY</p>
                     </div>
-                    {(order.report as { paymentLink?: string })?.paymentLink && (
-                      <div className="surface-muted rounded-xl p-3">
-                        <p className="text-xs text-muted">Төлбөрийн холбоос</p>
-                        <a 
-                          href={(order.report as { paymentLink?: string }).paymentLink} 
-                          target="_blank" 
-                          rel="noreferrer" 
-                          className="link-primary text-sm break-all line-clamp-2"
-                        >
-                          {(order.report as { paymentLink?: string }).paymentLink}
-                        </a>
-                      </div>
-                    )}
                   </div>
                   <div className="space-y-2">
                     {reportItems.map((rItem, idx) => {
@@ -292,12 +312,41 @@ export default function UserOrderDetailPage(): React.JSX.Element {
                         (img.startsWith("http://") || img.startsWith("https://"))
                       );
                       const total = rItem.agentTotal ?? (rItem.agentPrice || 0) * (rItem.quantity || 1);
+                      const itemTrackingCode = (rItem as { trackingCode?: string }).trackingCode;
+                      // Барааны нэрийг олох - эхлээд report item-аас, дараа нь order items-аас
+                      const itemTitle = rItem.title || items[idx]?.title || "Бараа";
                       return (
                         <div key={idx} className="surface-muted rounded-xl p-3 flex justify-between gap-3">
                           <div className="space-y-1 flex-1 min-w-0">
-                            <p className="font-semibold text-sm">#{idx + 1} {rItem.title}</p>
+                            <p className="font-semibold text-sm">#{idx + 1} {itemTitle}</p>
                             <p className="text-xs text-secondary">{rItem.agentPrice} × {rItem.quantity} = {total} CNY</p>
                             {(rItem as { note?: string }).note && <p className="text-xs text-secondary">📝 {(rItem as { note?: string }).note}</p>}
+                            {itemTrackingCode && (
+                              <div className="mt-1">
+                                <span className="text-xs text-muted">Tracking: </span>
+                                <button
+                                  onClick={async (e) => {
+                                    try {
+                                      await navigator.clipboard.writeText(itemTrackingCode);
+                                      const btn = e.target as HTMLElement;
+                                      const originalText = btn.textContent;
+                                      btn.textContent = "✓ Хуулсан!";
+                                      setTimeout(() => {
+                                        if (btn.textContent) {
+                                          btn.textContent = originalText;
+                                        }
+                                      }, 2000);
+                                    } catch (err) {
+                                      alert("Хуулах боломжгүй");
+                                    }
+                                  }}
+                                  className="chip-success text-xs font-semibold px-2 py-0.5 rounded-full hover:opacity-80 transition-opacity cursor-pointer"
+                                  title="Tracking код хуулах"
+                                >
+                                  📦 {itemTrackingCode}
+                                </button>
+                              </div>
+                            )}
                           </div>
                           {imgs.length > 0 && (
                             <div className="flex gap-1 flex-wrap shrink-0">
@@ -309,7 +358,7 @@ export default function UserOrderDetailPage(): React.JSX.Element {
                                 >
                                   <img 
                                     src={img} 
-                                    alt={`${rItem.title} ${imgIdx + 1}`} 
+                                    alt={`${itemTitle} ${imgIdx + 1}`} 
                                     className="img-cover"
                                     onError={(e) => {
                                       const target = e.target as HTMLImageElement;
@@ -444,14 +493,6 @@ export default function UserOrderDetailPage(): React.JSX.Element {
                       {settings.bankOwner && <p>{settings.bankOwner}</p>}
                       <p className="text-xs text-muted mt-2">Ханш: {rate ? `${rate}₮/CNY` : "—"}</p>
                     </div>
-                    {(order?.report as { paymentLink?: string })?.paymentLink && (
-                      <div className="surface-muted rounded-xl p-3">
-                        <p className="text-xs text-muted">Төлбөрийн холбоос</p>
-                        <a href={(order.report as { paymentLink?: string }).paymentLink} target="_blank" rel="noreferrer" className="link-primary text-sm break-all">
-                          {(order.report as { paymentLink?: string }).paymentLink}
-                        </a>
-                      </div>
-                    )}
                   </div>
                 ) : (
                   <p className="text-sm text-muted">Төлбөрийн мэдээлэл зөвхөн "Авах" дарсны дараа харагдана.</p>
