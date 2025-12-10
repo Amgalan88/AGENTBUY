@@ -5,6 +5,7 @@ const { normalizeItemImages, uploadImages } = require("../services/cloudinarySer
 
 const RESEARCH_LOCK_HOURS = 2;
 const TRACK_ALLOWED = [
+  ORDER_STATUS.PAYMENT_CONFIRMED,
   ORDER_STATUS.ORDER_PLACED,
   ORDER_STATUS.CARGO_IN_TRANSIT,
   ORDER_STATUS.ARRIVED_AT_CARGO,
@@ -100,7 +101,32 @@ async function submitReport(req, res) {
     assertTransition(order.status, ORDER_STATUS.REPORT_SUBMITTED, "agent");
 
     const { items = [], pricing = {}, paymentLink } = req.body;
-    const normalizedItems = await normalizeItemImages(items);
+    
+    // Зурагнуудыг Cloudinary-д upload хийх (base64 string-уудыг URL болгох)
+    let normalizedItems;
+    try {
+      normalizedItems = await normalizeItemImages(items, { folder: "agentbuy/reports" });
+    } catch (err) {
+      console.error("submitReport: normalizeItemImages error", err);
+      return res.status(500).json({ message: "Зургуудыг upload хийхэд алдаа гарлаа. Дахин оролдоно уу." });
+    }
+    
+    // Base64 string үлдсэн эсэхийг шалгах (зөвхөн URL байх ёстой)
+    const hasBase64 = normalizedItems.some(item => {
+      if (Array.isArray(item.images)) {
+        return item.images.some(img => typeof img === "string" && img.startsWith("data:image"));
+      }
+      if (item.imageUrl && typeof item.imageUrl === "string") {
+        return item.imageUrl.startsWith("data:image");
+      }
+      return false;
+    });
+    
+    if (hasBase64) {
+      console.error("submitReport: Base64 string үлдсэн байна");
+      return res.status(500).json({ message: "Зургуудыг upload хийхэд алдаа гарлаа. Дахин оролдоно уу." });
+    }
+    
     order.report = {
       items: normalizedItems,
       pricing,
@@ -128,7 +154,9 @@ async function updateTracking(req, res) {
     if (!order) return res.status(404).json({ message: "Захиалга олдсонгүй" });
     if (!order.agentId?.equals(req.user._id)) return res.status(403).json({ message: "Энэ захиалга таны биш" });
     if (!TRACK_ALLOWED.includes(order.status)) {
-      return res.status(400).json({ message: "Энэ төлөвт tracking оруулах боломжгүй" });
+      return res.status(400).json({ 
+        message: `Энэ төлөвт tracking оруулах боломжгүй. Төлөв: ${order.status}. Tracking оруулах боломжтой төлөвүүд: ${TRACK_ALLOWED.join(", ")}` 
+      });
     }
     order.tracking = order.tracking || {};
     order.tracking.code = code || "";
@@ -153,14 +181,17 @@ async function addAgentComment(req, res) {
       return res.status(403).json({ message: "Энэ захиалга таны биш" });
     }
 
-    const { message, attachments = [] } = req.body;
-    if (!message || !message.trim()) {
-      return res.status(400).json({ message: "Сэтгэгдэл хоосон байж болохгүй" });
+    const { message = "", attachments = [] } = req.body;
+    const hasMessage = message && message.trim();
+    const hasAttachments = Array.isArray(attachments) && attachments.length > 0;
+    
+    if (!hasMessage && !hasAttachments) {
+      return res.status(400).json({ message: "Мессеж эсвэл зураг заавал оруулах ёстой" });
     }
 
     // Зурагнуудыг Cloudinary-д upload хийх
     let uploadedAttachments = [];
-    if (Array.isArray(attachments) && attachments.length > 0) {
+    if (hasAttachments) {
       try {
         uploadedAttachments = await uploadImages(attachments, { folder: "agentbuy/chat" });
       } catch (uploadErr) {
@@ -173,7 +204,7 @@ async function addAgentComment(req, res) {
     order.comments.push({
       senderId: req.user._id,
       senderRole: "agent",
-      message: message.trim(),
+      message: hasMessage ? message.trim() : "",
       attachments: uploadedAttachments,
     });
     await order.save();

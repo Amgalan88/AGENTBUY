@@ -215,14 +215,17 @@ async function addComment(req, res) {
     const order = await Order.findOne({ _id: req.params.id, userId: req.user._id });
     if (!order) return res.status(404).json(ERR_NOT_FOUND);
 
-    const { message, attachments = [] } = req.body;
-    if (!message || !message.trim()) {
-      return res.status(400).json({ message: "Сэтгэгдэл хоосон байж болохгүй" });
+    const { message = "", attachments = [] } = req.body;
+    const hasMessage = message && message.trim();
+    const hasAttachments = Array.isArray(attachments) && attachments.length > 0;
+    
+    if (!hasMessage && !hasAttachments) {
+      return res.status(400).json({ message: "Мессеж эсвэл зураг заавал оруулах ёстой" });
     }
 
     // Зурагнуудыг Cloudinary-д upload хийх
     let uploadedAttachments = [];
-    if (Array.isArray(attachments) && attachments.length > 0) {
+    if (hasAttachments) {
       try {
         uploadedAttachments = await uploadImages(attachments, { folder: "agentbuy/chat" });
       } catch (uploadErr) {
@@ -235,7 +238,7 @@ async function addComment(req, res) {
     order.comments.push({
       senderId: req.user._id,
       senderRole: "user",
-      message: message.trim(),
+      message: hasMessage ? message.trim() : "",
       attachments: uploadedAttachments,
     });
     await order.save();

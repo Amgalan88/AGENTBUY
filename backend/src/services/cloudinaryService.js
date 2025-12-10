@@ -99,16 +99,26 @@ async function uploadImages(values = [], options = {}) {
   const uploaded = await Promise.all(
     values.map(async (img) => {
       try {
-        return await uploadImage(img, options);
+        // Base64 эсвэл URL эсэхийг шалгах
+        if (typeof img === "string" && !shouldUpload(img) && (img.startsWith("http://") || img.startsWith("https://"))) {
+          // Аль хэдийн URL байвал буцаах
+          return img;
+        }
+        // Base64 байвал Cloudinary-д upload хийх
+        if (shouldUpload(img)) {
+          return await uploadImage(img, options);
+        }
+        // Бусад тохиолдолд null буцаах
+        return null;
       } catch (err) {
         console.error("[Cloudinary] Failed to upload image in batch:", err.message);
-        // Batch upload дээр алдаа гарвал null буцаах, дараа нь filter хийх
+        // Алдаа гарвал null буцаах, base64 string хадгалахгүй
         return null;
       }
     })
   );
   // Null-уудыг шүүх, мөн base64 string-уудыг шүүх (зөвхөн URL үлдээх)
-  return uploaded.filter((url) => url && (url.startsWith("http://") || url.startsWith("https://")));
+  return uploaded.filter((url) => url && typeof url === "string" && (url.startsWith("http://") || url.startsWith("https://")));
 }
 
 async function normalizeItemImages(items = [], options = {}) {
@@ -121,12 +131,28 @@ async function normalizeItemImages(items = [], options = {}) {
       if (Array.isArray(item.images) && item.images.length) {
         console.log("[Cloudinary] Uploading", item.images.length, "images for item:", item.title);
         next.images = await uploadImages(item.images, options);
-        console.log("[Cloudinary] ✅ Images uploaded:", next.images);
+        console.log("[Cloudinary] ✅ Images uploaded:", next.images.length, "successful");
+        // Base64 string байвал алдаа гарсан гэсэн үг, хоосон массив үлдээх
+        if (next.images.length === 0 && item.images.length > 0) {
+          console.warn("[Cloudinary] ⚠️ No images uploaded successfully for item:", item.title);
+        }
       }
       if (typeof item.imageUrl === "string" && item.imageUrl) {
-        console.log("[Cloudinary] Uploading imageUrl for item:", item.title);
-        next.imageUrl = await uploadImage(item.imageUrl, options);
-        console.log("[Cloudinary] ✅ ImageUrl uploaded:", next.imageUrl);
+        // Аль хэдийн URL байвал өөрчлөхгүй
+        if (item.imageUrl.startsWith("http://") || item.imageUrl.startsWith("https://")) {
+          next.imageUrl = item.imageUrl;
+        } else if (shouldUpload(item.imageUrl)) {
+          // Base64 байвал upload хийх
+          try {
+            console.log("[Cloudinary] Uploading imageUrl for item:", item.title);
+            next.imageUrl = await uploadImage(item.imageUrl, options);
+            console.log("[Cloudinary] ✅ ImageUrl uploaded:", next.imageUrl);
+          } catch (err) {
+            console.error("[Cloudinary] ❌ Failed to upload imageUrl:", err.message);
+            // Алдаа гарвал imageUrl-ийг устгах, base64 хадгалахгүй
+            delete next.imageUrl;
+          }
+        }
       }
       return next;
     })

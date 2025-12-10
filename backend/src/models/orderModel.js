@@ -85,6 +85,7 @@ const orderSchema = new mongoose.Schema(
         exchangeRate: { type: Number },
         grandTotalMnt: { type: Number },
       },
+      paymentLink: { type: String },
       agentComment: { type: String },
       submittedAt: { type: Date },
     },
@@ -92,7 +93,7 @@ const orderSchema = new mongoose.Schema(
       {
         senderId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
         senderRole: { type: String, enum: ["user", "agent"] },
-        message: { type: String, required: true },
+        message: { type: String, default: "" }, // Message эсвэл attachments аль нэг нь байх ёстой (controller дээр шалгана)
         attachments: [{ type: String }], // Зурагнууд (Cloudinary URL)
         createdAt: { type: Date, default: Date.now },
       },
