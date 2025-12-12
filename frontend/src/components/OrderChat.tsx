@@ -160,6 +160,11 @@ export default function OrderChat({
             alt="Zoomed"
             className="max-w-full max-h-full object-contain rounded-lg"
             onClick={(e) => e.stopPropagation()}
+            onError={(e) => {
+              console.error("Zoomed image load error:", zoomedImage);
+              e.currentTarget.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dy='.3em' fill='%23999'%3EЗураг ачаалахгүй байна%3C/text%3E%3C/svg%3E";
+            }}
+            {...(zoomedImage.includes("cloudinary.com") && !zoomedImage.startsWith("data:") ? { crossOrigin: "anonymous" } : {})}
           />
         </div>
       )}
@@ -226,21 +231,45 @@ export default function OrderChat({
                     {/* Attachments */}
                     {c.attachments && Array.isArray(c.attachments) && c.attachments.length > 0 && (
                       <div className={`flex flex-wrap gap-1 ${c.senderRole === currentRole ? "justify-end" : "justify-start"} mt-1`}>
-                        {c.attachments.map((imgUrl, imgIdx) => (
-                          <div key={imgIdx} className="relative group">
-                            <img
-                              src={imgUrl}
-                              alt={`Attachment ${imgIdx + 1}`}
-                              className="w-24 h-24 object-cover rounded-lg cursor-pointer hover:opacity-80 transition-opacity border border-surface-card-border"
-                              onClick={() => toggleImageZoom(imgUrl)}
-                            />
-                            {zoomedImage === imgUrl && (
-                              <span className="absolute -top-1 -right-1 bg-accent-primary text-white rounded-full w-4 h-4 flex items-center justify-center text-[8px]">
-                                ⛶
-                              </span>
-                            )}
-                          </div>
-                        ))}
+                        {c.attachments
+                          .filter((imgUrl) => {
+                            if (!imgUrl || typeof imgUrl !== "string" || imgUrl.trim() === "") {
+                              console.warn("Invalid attachment URL:", imgUrl);
+                              return false;
+                            }
+                            return true;
+                          })
+                          .map((imgUrl, imgIdx) => {
+                            // Debug: Log attachment URLs in development
+                            if (process.env.NODE_ENV === "development") {
+                              console.log("Displaying attachment:", imgUrl.substring(0, 50) + "...");
+                            }
+                            // Check if URL is base64 or external (Cloudinary)
+                            const isBase64 = imgUrl.startsWith("data:image");
+                            const isCloudinary = imgUrl.includes("cloudinary.com") || imgUrl.includes("res.cloudinary.com");
+                            
+                            return (
+                            <div key={imgIdx} className="relative group">
+                              <img
+                                src={imgUrl}
+                                alt={`Attachment ${imgIdx + 1}`}
+                                className="w-24 h-24 object-cover rounded-lg cursor-pointer hover:opacity-80 transition-opacity border border-surface-card-border"
+                                onClick={() => toggleImageZoom(imgUrl)}
+                                onError={(e) => {
+                                  console.error("Image load error:", imgUrl);
+                                  e.currentTarget.style.display = "none";
+                                }}
+                                loading="lazy"
+                                {...(isCloudinary && !isBase64 ? { crossOrigin: "anonymous" } : {})}
+                              />
+                              {zoomedImage === imgUrl && (
+                                <span className="absolute -top-1 -right-1 bg-accent-primary text-white rounded-full w-4 h-4 flex items-center justify-center text-[8px]">
+                                  ⛶
+                                </span>
+                              )}
+                            </div>
+                            );
+                          })}
                       </div>
                     )}
                   </div>

@@ -43,7 +43,7 @@ export default function HomePage(): React.JSX.Element {
           <RoleCard
             title="Хэрэглэгч"
             desc="Хятадын сайтуудаас бараа хайж, агентуудаас үнэ санал авч захиалга өгөх."
-            href="/auth/login?role=user"
+            href="/auth/login"
             accent="primary"
             icon="🛒"
           />
@@ -51,7 +51,7 @@ export default function HomePage(): React.JSX.Element {
           <RoleCard
             title="Агент"
             desc="Шинэ захиалгуудыг түгжиж судалгаа хийн тайлан илгээх."
-            href="/auth/login?role=agent"
+            href="/auth/login"
             accent="secondary"
             icon="🔍"
           />

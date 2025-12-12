@@ -24,7 +24,9 @@ export function getSocket(): Socket | null {
   });
 
   socket.on("connect", () => {
-    console.log("[Socket] Connected:", socket?.id);
+    if (socket?.id) {
+      console.log("[Socket] Connected:", socket.id);
+    }
   });
 
   socket.on("disconnect", () => {

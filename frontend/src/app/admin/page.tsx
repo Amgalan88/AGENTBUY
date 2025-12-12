@@ -80,6 +80,8 @@ interface TrackingDraft {
   [orderId: string]: string;
 }
 
+const ADMIN_EMAIL = 'erdenebilegamgalan@gmail.com';
+
 export default function AdminPage(): React.JSX.Element {
   const router = useRouter();
   const [orders, setOrders] = useState<Order[]>([]);
@@ -119,13 +121,19 @@ export default function AdminPage(): React.JSX.Element {
     const checkAuth = async (): Promise<boolean> => {
       try {
         const me = await api<User>("/api/auth/me");
+        if (!me || !me._id) {
+          router.replace("/admin/login");
+          return false;
+        }
         const roles = me?.roles || [];
         if (!roles.includes("admin") && !(roles as string[]).includes("super_admin")) {
           router.replace("/admin/login");
           return false;
         }
         return true;
-      } catch {
+      } catch (err) {
+        // 401 алдааг тусгайлан боловсруулах
+        console.log("[Admin] Auth check failed, redirecting to login");
         router.replace("/admin/login");
         return false;
       }
@@ -861,7 +869,7 @@ export default function AdminPage(): React.JSX.Element {
             <div className="space-y-3 max-h-[360px] overflow-y-auto pr-1">
               {cargos.map((cargo) => (
                 <div
-                  key={cargo._id}
+                  key={cargo._id || `cargo-${cargo.name}`}
                   className="flex items-center justify-between rounded-2xl border border-slate-200 px-3 py-3"
                 >
                   <div>

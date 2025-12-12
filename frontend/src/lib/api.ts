@@ -68,12 +68,17 @@ export async function api<T = unknown>(path: string, options: ApiRequestOptions 
       const currentPath = window.location.pathname;
       const isAuthPage = currentPath.startsWith("/auth/") || currentPath.startsWith("/admin/login");
       
-      if (!isAuthPage) {
-        // Auth хуудас биш бол login руу чиглүүлэх
-        window.location.href = "/auth/login";
-        // Redirect хийгдэх хүртэл wait хийхгүй
-        throw new Error("Нэвтрэх шаардлагатай");
+      if (isAuthPage) {
+        // Auth хуудас дээр байгаа бол 401 алдаа хэвийн (нэвтэрээгүй хэрэглэгч)
+        // Console дээр алдаа харагдахгүй байлгах - зөвхөн null буцаах
+        return null;
       }
+      
+      // Auth хуудас биш бол login руу чиглүүлэх
+      if (currentPath !== "/auth/login") {
+        window.location.href = "/auth/login";
+      }
+      throw new Error("Нэвтрэх шаардлагатай");
     }
     
     const error: ApiError = new Error(message) as ApiError;
