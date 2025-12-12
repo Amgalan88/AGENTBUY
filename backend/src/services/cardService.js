@@ -1,5 +1,4 @@
-const CardTransaction = require("../models/cardTransactionModel");
-const User = require("../models/userModel");
+const { prisma } = require("../config/db");
 
 /**
  * Картын үлдэгдэл өөрчлөх (race condition-ээс сэргийлэх)
@@ -12,7 +11,8 @@ const User = require("../models/userModel");
  */
 async function applyCardChange(user, diff, type, orderId, meta = {}) {
   // Race condition-ээс сэргийлэх: Database дээрх хамгийн сүүлийн balance-ийг авах
-  const freshUser = await User.findById(user._id);
+  const userId = user.id || user._id;
+  const freshUser = await prisma.user.findUnique({ where: { id: userId } });
   if (!freshUser) {
     const err = new Error("Хэрэглэгч олдсонгүй");
     err.statusCode = 404;
@@ -28,12 +28,11 @@ async function applyCardChange(user, diff, type, orderId, meta = {}) {
     throw err;
   }
 
-  // Atomic update: findOneAndUpdate ашиглах
-  const updatedUser = await User.findByIdAndUpdate(
-    freshUser._id,
-    { $set: { cardBalance: nextBalance } },
-    { new: true }
-  );
+  // Atomic update: Prisma transaction ашиглах
+  const updatedUser = await prisma.user.update({
+    where: { id: userId },
+    data: { cardBalance: nextBalance },
+  });
 
   if (!updatedUser) {
     const err = new Error("Картын үлдэгдэл шинэчлэхэд алдаа");
@@ -42,13 +41,15 @@ async function applyCardChange(user, diff, type, orderId, meta = {}) {
   }
 
   // Transaction log үүсгэх
-  await CardTransaction.create({
-    userId: updatedUser._id,
-    orderId,
-    type,
-    cardChange: diff,
-    balanceAfter: nextBalance,
-    meta,
+  await prisma.cardTransaction.create({
+    data: {
+      userId: updatedUser.id,
+      orderId: orderId || null,
+      type,
+      cardChange: diff,
+      balanceAfter: nextBalance,
+      meta: meta || {},
+    },
   });
 
   return updatedUser;
@@ -68,9 +69,11 @@ async function consumeOnPublish(user, orderId, order = null) {
 
   // Захиалгын мэдээлэл авах (хэрэв order object өгөгдөөгүй бол)
   let orderData = order;
-  if (!orderData) {
-    const Order = require("../models/orderModel");
-    orderData = await Order.findById(orderId);
+  if (!orderData && orderId) {
+    orderData = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: { items: true },
+    });
   }
 
   // Багц захиалга эсэхийг шалгах
@@ -85,7 +88,8 @@ async function consumeOnPublish(user, orderId, order = null) {
   }
 
   // Картын үлдэгдэл хангалттай эсэхийг шалгах
-  const freshUser = await User.findById(user._id);
+  const userId = user.id || user._id;
+  const freshUser = await prisma.user.findUnique({ where: { id: userId } });
   if ((freshUser.cardBalance || 0) < cardsToConsume) {
     const err = new Error(`Карт хүрэлцэхгүй. ${cardsToConsume} карт шаардлагатай`);
     err.statusCode = 400;
@@ -105,19 +109,22 @@ async function consumeOnPublish(user, orderId, order = null) {
  */
 async function returnOnCancel(user, orderId) {
   // Transaction log-оос хэрэглэсэн картын тоог олох
-  const CardTransaction = require("../models/cardTransactionModel");
-  const consumeTransaction = await CardTransaction.findOne({
-    userId: user._id,
-    orderId: orderId,
-    type: "consume",
-  }).sort({ createdAt: -1 });
+  const userId = user.id || user._id;
+  const consumeTransaction = await prisma.cardTransaction.findFirst({
+    where: {
+      userId: userId,
+      orderId: orderId || null,
+      type: "consume",
+    },
+    orderBy: { createdAt: "desc" },
+  });
 
   if (consumeTransaction) {
     // Хэрэглэсэн картын тоог буцаан олгох
     const cardsToReturn = Math.abs(consumeTransaction.cardChange);
     return applyCardChange(user, cardsToReturn, "return", orderId, {
       reason: "order_cancelled",
-      originalConsume: consumeTransaction._id,
+      originalConsume: consumeTransaction.id,
     });
   } else {
     // Transaction олдохгүй бол default 1 карт буцаан олгох
@@ -133,7 +140,8 @@ async function returnOnCancel(user, orderId) {
  */
 async function onPaymentConfirmed(user, orderId) {
   // 1. Амжилттай захиалгын тооллогыг нэмэх (эхлээд тооллого нэмэх)
-  const freshUser = await User.findById(user._id);
+  const userId = user.id || user._id;
+  const freshUser = await prisma.user.findUnique({ where: { id: userId } });
   if (!freshUser) {
     throw new Error("Хэрэглэгч олдсонгүй");
   }
@@ -146,7 +154,7 @@ async function onPaymentConfirmed(user, orderId) {
   // 3. Хэрэв 2 удаа амжилттай захиалга хийсэн бол нэмэлт 1 карт олгох
   if (newCompletedCount % 2 === 0) {
     // 2, 4, 6, 8... удаа амжилттай бол бонус карт
-    const updatedUser = await User.findById(user._id);
+    const updatedUser = await prisma.user.findUnique({ where: { id: userId } });
     await applyCardChange(updatedUser, 1, "bonus_card", orderId, {
       reason: "completed_orders_bonus",
       completedCount: newCompletedCount,
@@ -154,8 +162,9 @@ async function onPaymentConfirmed(user, orderId) {
   }
 
   // Тооллогыг хадгалах
-  await User.findByIdAndUpdate(user._id, {
-    $set: { completedOrdersCount: newCompletedCount },
+  await prisma.user.update({
+    where: { id: userId },
+    data: { completedOrdersCount: newCompletedCount },
   });
 }
 
@@ -168,22 +177,30 @@ async function completeBonus(user, orderId) {
   await applyCardChange(user, 1, "return", orderId);
 
   // 0.5 картын бонус (progress)
-  const nextProgress = (user.cardProgress || 0) + 1;
+  const userId = user.id || user._id;
+  const freshUser = await prisma.user.findUnique({ where: { id: userId } });
+  const nextProgress = (freshUser.cardProgress || 0) + 1;
 
   if (nextProgress >= 2) {
-    user.cardProgress = nextProgress - 2;
-    await user.save();
-    await applyCardChange(user, 1, "bonus_card", orderId, { progressUsed: nextProgress });
+    await prisma.user.update({
+      where: { id: userId },
+      data: { cardProgress: nextProgress - 2 },
+    });
+    await applyCardChange(freshUser, 1, "bonus_card", orderId, { progressUsed: nextProgress });
   } else {
-    user.cardProgress = nextProgress;
-    await user.save();
-    await CardTransaction.create({
-      userId: user._id,
-      orderId,
-      type: "bonus_progress",
-      cardChange: 0,
-      balanceAfter: user.cardBalance,
-      meta: { progress: user.cardProgress },
+    await prisma.user.update({
+      where: { id: userId },
+      data: { cardProgress: nextProgress },
+    });
+    await prisma.cardTransaction.create({
+      data: {
+        userId: userId,
+        orderId: orderId || null,
+        type: "bonus_progress",
+        cardChange: 0,
+        balanceAfter: freshUser.cardBalance,
+        meta: { progress: nextProgress },
+      },
     });
   }
 }

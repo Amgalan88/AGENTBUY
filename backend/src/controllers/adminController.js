@@ -1,15 +1,12 @@
-const Cargo = require("../models/cargoModel");
-const Order = require("../models/orderModel");
-const AgentProfile = require("../models/agentProfileModel");
-const Settings = require("../models/settingsModel");
-const User = require("../models/userModel");
-const CardRequest = require("../models/cardRequestModel");
+const { prisma } = require("../config/db");
 const { assertTransition, ORDER_STATUS } = require("../services/orderStateService");
 const { applyCardChange, onPaymentConfirmed } = require("../services/cardService");
 const { getIO } = require("../socket");
 
 async function listCargos(_req, res) {
-  const cargos = await Cargo.find().sort({ createdAt: -1 });
+  const cargos = await prisma.cargo.findMany({
+    orderBy: { createdAt: "desc" },
+  });
   res.json(cargos);
 }
 
@@ -17,14 +14,16 @@ async function createCargo(req, res) {
   try {
     const { name, description, siteUrl, logoUrl, contactPhone, supportedCities = [], isActive } = req.body;
     if (!name) return res.status(400).json({ message: "Нэр шаардлагатай" });
-    const cargo = await Cargo.create({
-      name,
-      description,
-      siteUrl,
-      logoUrl,
-      contactPhone,
-      isActive: isActive !== false,
-      supportedCities,
+    const cargo = await prisma.cargo.create({
+      data: {
+        name,
+        description,
+        siteUrl,
+        logoUrl,
+        contactPhone,
+        isActive: isActive !== false,
+        supportedCities,
+      },
     });
     res.status(201).json(cargo);
   } catch (err) {
@@ -35,12 +34,16 @@ async function createCargo(req, res) {
 
 async function updateCargoStatus(req, res) {
   try {
-    const cargo = await Cargo.findById(req.params.id);
+    const cargo = await prisma.cargo.findUnique({ where: { id: req.params.id } });
     if (!cargo) return res.status(404).json({ message: "Карго олдсонгүй" });
-    if (typeof req.body.isActive === "boolean") cargo.isActive = req.body.isActive;
-    if (req.body.name) cargo.name = req.body.name;
-    await cargo.save();
-    res.json(cargo);
+    const updateData = {};
+    if (typeof req.body.isActive === "boolean") updateData.isActive = req.body.isActive;
+    if (req.body.name) updateData.name = req.body.name;
+    const updatedCargo = await prisma.cargo.update({
+      where: { id: req.params.id },
+      data: updateData,
+    });
+    res.json(updatedCargo);
   } catch (err) {
     console.error("updateCargoStatus error", err);
     res.status(500).json({ message: "Карго шинэчлэхэд алдаа гарлаа" });
@@ -49,9 +52,9 @@ async function updateCargoStatus(req, res) {
 
 async function deleteCargo(req, res) {
   try {
-    const cargo = await Cargo.findById(req.params.id);
+    const cargo = await prisma.cargo.findUnique({ where: { id: req.params.id } });
     if (!cargo) return res.status(404).json({ message: "Карго олдсонгүй" });
-    await cargo.deleteOne();
+    await prisma.cargo.delete({ where: { id: req.params.id } });
     res.status(204).end();
   } catch (err) {
     console.error("deleteCargo error", err);
@@ -60,41 +63,86 @@ async function deleteCargo(req, res) {
 }
 
 async function listOrders(_req, res) {
-  const orders = await Order.find().populate("cargoId").sort({ createdAt: -1 }).limit(200);
+  const orders = await prisma.order.findMany({
+    include: {
+      cargo: true,
+      items: true,
+      user: {
+        select: { id: true, fullName: true, phone: true },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 200,
+  });
   res.json(orders);
 }
 
 async function confirmPayment(req, res) {
   try {
-    const order = await Order.findById(req.params.id).populate("userId");
+    const order = await prisma.order.findUnique({
+      where: { id: req.params.id },
+      include: {
+        user: true,
+        report: {
+          include: {
+            pricing: true,
+          },
+        },
+        payment: true,
+      },
+    });
     if (!order) return res.status(404).json({ message: "Захиалга олдсонгүй" });
 
     assertTransition(order.status, ORDER_STATUS.PAYMENT_CONFIRMED, "admin");
 
-    order.status = ORDER_STATUS.PAYMENT_CONFIRMED;
-    order.payment = order.payment || {};
-    order.payment.status = "confirmed";
-    order.payment.paidAt = order.payment.paidAt || new Date();
-    if (req.body?.amountMnt) {
-      order.payment.amountMnt = req.body.amountMnt;
-    } else if (order.report?.pricing?.grandTotalCny) {
-      const settings = await Settings.findOne({ key: "default" });
+    let amountMnt = req.body?.amountMnt;
+    if (!amountMnt && order.report?.pricing?.grandTotalCny) {
+      const settings = await prisma.settings.findUnique({ where: { key: "default" } });
       if (settings?.cnyRate) {
-        order.payment.amountMnt = Math.round(order.report.pricing.grandTotalCny * settings.cnyRate);
+        amountMnt = Math.round(order.report.pricing.grandTotalCny * settings.cnyRate);
       }
     }
 
-    await order.save();
+    // Payment үүсгэх эсвэл шинэчлэх
+    if (order.payment) {
+      await prisma.orderPayment.update({
+        where: { orderId: order.id },
+        data: {
+          status: "confirmed",
+          paidAt: order.payment.paidAt || new Date(),
+          amountMnt: amountMnt || order.payment.amountMnt,
+        },
+      });
+    } else {
+      await prisma.orderPayment.create({
+        data: {
+          orderId: order.id,
+          status: "confirmed",
+          paidAt: new Date(),
+          amountMnt: amountMnt || null,
+        },
+      });
+    }
+
+    const updatedOrder = await prisma.order.update({
+      where: { id: order.id },
+      data: { status: ORDER_STATUS.PAYMENT_CONFIRMED },
+      include: {
+        cargo: true,
+        items: true,
+        payment: true,
+      },
+    });
 
     // Карт буцаан олгох логик: Амжилттай захиалга = карт буцаалт + 2 удаа бол бонус
     if (order.userId) {
       try {
-        await onPaymentConfirmed(order.userId, order._id);
+        await onPaymentConfirmed(order.user, order.id);
         // Socket event илгээх - хэрэглэгчид мэдэгдэх
-        const updatedUser = await User.findById(order.userId._id);
+        const updatedUser = await prisma.user.findUnique({ where: { id: order.userId } });
         try {
           getIO().emit("card:balance:update", { 
-            userId: order.userId._id.toString(),
+            userId: order.userId,
             cardBalance: updatedUser.cardBalance 
           });
         } catch (e) {
@@ -106,20 +154,18 @@ async function confirmPayment(req, res) {
       }
     }
 
-    const populated = await Order.findById(order._id).populate("cargoId");
-    
     // Socket event илгээх - захиалгын статус өөрчлөгдсөнийг мэдэгдэх
     try {
       getIO().emit("order:update", { 
-        orderId: order._id.toString(),
-        status: order.status,
-        order: populated.toObject ? populated.toObject() : populated
+        orderId: order.id,
+        status: updatedOrder.status,
+        order: updatedOrder,
       });
     } catch (e) {
       console.error("Socket emit error:", e);
     }
     
-    res.json(populated);
+    res.json(updatedOrder);
   } catch (err) {
     console.error("confirmPayment error", err);
     res.status(err.statusCode || 500).json({ message: err.message || "Төлбөр баталгаажуулахад алдаа гарлаа" });
@@ -127,7 +173,13 @@ async function confirmPayment(req, res) {
 }
 
 async function listAgents(_req, res) {
-  const profiles = await AgentProfile.find().populate("userId");
+  const profiles = await prisma.agentProfile.findMany({
+    include: {
+      user: {
+        select: { id: true, fullName: true, phone: true, email: true, isActive: true },
+      },
+    },
+  });
   res.json(profiles);
 }
 
@@ -137,11 +189,18 @@ async function verifyAgent(req, res) {
     if (!["verified", "rejected"].includes(status)) {
       return res.status(400).json({ message: "status=verified|rejected байх ёстой" });
     }
-    const profile = await AgentProfile.findOne({ userId: req.params.id });
+    const profile = await prisma.agentProfile.findUnique({ where: { userId: req.params.id } });
     if (!profile) return res.status(404).json({ message: "Agent profile олдсонгүй" });
-    profile.verificationStatus = status;
-    await profile.save();
-    res.json(profile);
+    const updatedProfile = await prisma.agentProfile.update({
+      where: { userId: req.params.id },
+      data: { verificationStatus: status },
+      include: {
+        user: {
+          select: { id: true, fullName: true, phone: true, email: true },
+        },
+      },
+    });
+    res.json(updatedProfile);
   } catch (err) {
     console.error("verifyAgent error", err);
     res.status(500).json({ message: "Баталгаажуулахад алдаа гарлаа" });
@@ -150,13 +209,17 @@ async function verifyAgent(req, res) {
 
 async function updateAgentActive(req, res) {
   try {
-    const user = await User.findById(req.params.id);
+    const user = await prisma.user.findUnique({ where: { id: req.params.id } });
     if (!user || !user.roles.includes("agent")) return res.status(404).json({ message: "Агент олдсонгүй" });
     if (typeof req.body.isActive === "boolean") {
-      user.isActive = req.body.isActive;
-      await user.save();
+      const updatedUser = await prisma.user.update({
+        where: { id: req.params.id },
+        data: { isActive: req.body.isActive },
+      });
+      res.json({ id: updatedUser.id, isActive: updatedUser.isActive });
+    } else {
+      res.json({ id: user.id, isActive: user.isActive });
     }
-    res.json({ id: user._id, isActive: user.isActive });
   } catch (err) {
     console.error("updateAgentActive error", err);
     res.status(500).json({ message: "Агент идэвх шинэчлэхэд алдаа гарлаа" });
@@ -165,14 +228,43 @@ async function updateAgentActive(req, res) {
 
 async function updateTracking(req, res) {
   try {
-    const { code } = req.body;
-    const order = await Order.findById(req.params.id);
+    const { code, carrierName, lastStatus } = req.body;
+    const order = await prisma.order.findUnique({
+      where: { id: req.params.id },
+      include: { tracking: true },
+    });
     if (!order) return res.status(404).json({ message: "Захиалга олдсонгүй" });
-    order.tracking = order.tracking || {};
-    order.tracking.code = code || "";
-    order.tracking.lastUpdatedAt = new Date();
-    await order.save();
-    const populated = await Order.findById(order._id).populate("cargoId");
+    
+    if (order.tracking) {
+      await prisma.orderTracking.update({
+        where: { orderId: order.id },
+        data: {
+          code: code || "",
+          carrierName: carrierName || null,
+          lastStatus: lastStatus || null,
+          lastUpdatedAt: new Date(),
+        },
+      });
+    } else {
+      await prisma.orderTracking.create({
+        data: {
+          orderId: order.id,
+          code: code || "",
+          carrierName: carrierName || null,
+          lastStatus: lastStatus || null,
+          lastUpdatedAt: new Date(),
+        },
+      });
+    }
+    
+    const populated = await prisma.order.findUnique({
+      where: { id: order.id },
+      include: {
+        cargo: true,
+        tracking: true,
+        items: true,
+      },
+    });
     res.json(populated);
   } catch (err) {
     console.error("updateTracking error", err);
@@ -181,18 +273,18 @@ async function updateTracking(req, res) {
 }
 
 async function getSettings(_req, res) {
-  const doc = await Settings.findOne({ key: "default" });
+  const doc = await prisma.settings.findUnique({ where: { key: "default" } });
   res.json(doc || {});
 }
 
 async function updateSettings(req, res) {
   try {
     const { cnyRate, bankName, bankAccount, bankOwner } = req.body;
-    const doc = await Settings.findOneAndUpdate(
-      { key: "default" },
-      { $set: { cnyRate, bankName, bankAccount, bankOwner, key: "default" } },
-      { new: true, upsert: true }
-    );
+    const doc = await prisma.settings.upsert({
+      where: { key: "default" },
+      update: { cnyRate, bankName, bankAccount, bankOwner },
+      create: { key: "default", cnyRate, bankName, bankAccount, bankOwner },
+    });
     res.json(doc);
   } catch (err) {
     console.error("updateSettings error", err);
@@ -206,14 +298,23 @@ async function updateSettings(req, res) {
 async function listCardRequests(_req, res) {
   try {
     const { status } = _req.query;
-    const filter = {};
-    if (status) filter.status = status;
+    const where = {};
+    if (status) where.status = status;
     
-    const requests = await CardRequest.find(filter)
-      .populate("userId", "fullName phone")
-      .populate("confirmedBy", "fullName")
-      .sort({ createdAt: -1 })
-      .limit(100);
+    const requests = await prisma.cardRequest.findMany({
+      where,
+      include: {
+        user: {
+          select: { id: true, fullName: true, phone: true },
+        },
+        confirmedBy: {
+          select: { id: true, fullName: true },
+        },
+        paymentInfo: true,
+      },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    });
     res.json(requests);
   } catch (err) {
     console.error("listCardRequests error", err);
@@ -226,7 +327,13 @@ async function listCardRequests(_req, res) {
  */
 async function confirmCardRequest(req, res) {
   try {
-    const request = await CardRequest.findById(req.params.id).populate("userId");
+    const request = await prisma.cardRequest.findUnique({
+      where: { id: req.params.id },
+      include: {
+        user: true,
+        paymentInfo: true,
+      },
+    });
     if (!request) return res.status(404).json({ message: "Хүсэлт олдсонгүй" });
     
     if (request.status !== "pending") {
@@ -235,34 +342,45 @@ async function confirmCardRequest(req, res) {
 
     // Карт нэмэх
     await applyCardChange(
-      request.userId,
+      request.user,
       request.quantity,
       "buy_package",
       null,
-      { requestId: request._id, pricePerCard: request.pricePerCard, totalAmount: request.totalAmount }
+      { requestId: request.id, pricePerCard: request.pricePerCard, totalAmount: request.totalAmount }
     );
 
     // Хүсэлтийг баталгаажуулах
-    request.status = "confirmed";
-    request.confirmedBy = req.user._id;
-    request.confirmedAt = new Date();
-    await request.save();
-
-    const populated = await CardRequest.findById(request._id)
-      .populate("userId", "fullName phone")
-      .populate("confirmedBy", "fullName");
+    const userId = req.user.id || req.user._id;
+    const updatedRequest = await prisma.cardRequest.update({
+      where: { id: request.id },
+      data: {
+        status: "confirmed",
+        confirmedByUserId: userId,
+        confirmedAt: new Date(),
+      },
+      include: {
+        user: {
+          select: { id: true, fullName: true, phone: true },
+        },
+        confirmedBy: {
+          select: { id: true, fullName: true },
+        },
+        paymentInfo: true,
+      },
+    });
 
     // Socket event илгээх - хэрэглэгчид мэдэгдэх
     try {
+      const updatedUser = await prisma.user.findUnique({ where: { id: request.userId } });
       getIO().emit("card:balance:update", { 
-        userId: request.userId._id.toString(),
-        cardBalance: request.userId.cardBalance 
+        userId: request.userId,
+        cardBalance: updatedUser.cardBalance 
       });
     } catch (e) {
       console.error("Socket emit error:", e);
     }
 
-    res.json(populated);
+    res.json(updatedRequest);
   } catch (err) {
     console.error("confirmCardRequest error", err);
     res.status(err.statusCode || 500).json({ message: err.message || "Картын хүсэлт баталгаажуулахад алдаа гарлаа" });
@@ -275,24 +393,36 @@ async function confirmCardRequest(req, res) {
 async function rejectCardRequest(req, res) {
   try {
     const { reason } = req.body;
-    const request = await CardRequest.findById(req.params.id);
+    const request = await prisma.cardRequest.findUnique({
+      where: { id: req.params.id },
+    });
     if (!request) return res.status(404).json({ message: "Хүсэлт олдсонгүй" });
     
     if (request.status !== "pending") {
       return res.status(400).json({ message: "Энэ хүсэлт аль хэдийн боловсруулагдсан" });
     }
 
-    request.status = "rejected";
-    request.rejectedReason = reason || "Татгалзсан";
-    request.confirmedBy = req.user._id;
-    request.confirmedAt = new Date();
-    await request.save();
+    const userId = req.user.id || req.user._id;
+    const updatedRequest = await prisma.cardRequest.update({
+      where: { id: request.id },
+      data: {
+        status: "rejected",
+        rejectedReason: reason || "Татгалзсан",
+        confirmedByUserId: userId,
+        confirmedAt: new Date(),
+      },
+      include: {
+        user: {
+          select: { id: true, fullName: true, phone: true },
+        },
+        confirmedBy: {
+          select: { id: true, fullName: true },
+        },
+        paymentInfo: true,
+      },
+    });
 
-    const populated = await CardRequest.findById(request._id)
-      .populate("userId", "fullName phone")
-      .populate("confirmedBy", "fullName");
-
-    res.json(populated);
+    res.json(updatedRequest);
   } catch (err) {
     console.error("rejectCardRequest error", err);
     res.status(500).json({ message: "Картын хүсэлт татгалзахад алдаа гарлаа" });

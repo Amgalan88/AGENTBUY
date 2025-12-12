@@ -1,6 +1,6 @@
 function safeUser(user) {
   return {
-    id: user._id,
+    id: user.id || user._id, // Support both Prisma (id) and Mongoose (_id)
     phone: user.phone,
     email: user.email,
     fullName: user.fullName,

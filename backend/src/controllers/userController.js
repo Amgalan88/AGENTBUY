@@ -1,7 +1,4 @@
-const Cargo = require("../models/cargoModel");
-const CardRequest = require("../models/cardRequestModel");
-const CardTransaction = require("../models/cardTransactionModel");
-const Settings = require("../models/settingsModel");
+const { prisma } = require("../config/db");
 const { safeUser } = require("./utils");
 
 async function getProfile(req, res) {
@@ -9,7 +6,10 @@ async function getProfile(req, res) {
 }
 
 async function listCargos(req, res) {
-  const cargos = await Cargo.find({ isActive: true }).sort({ createdAt: -1 });
+  const cargos = await prisma.cargo.findMany({
+    where: { isActive: true },
+    orderBy: { createdAt: "desc" },
+  });
   res.json(cargos);
 }
 
@@ -17,11 +17,15 @@ async function setDefaultCargo(req, res) {
   try {
     const cargoId = req.body?.cargoId;
     if (!cargoId) return res.status(400).json({ message: "Карго сонгоно уу" });
-    const cargo = await Cargo.findOne({ _id: cargoId, isActive: true });
+    const cargo = await prisma.cargo.findFirst({
+      where: { id: cargoId, isActive: true },
+    });
     if (!cargo) return res.status(404).json({ message: "Карго олдсонгүй эсвэл идэвхгүй" });
-    req.user.defaultCargoId = cargoId;
-    await req.user.save();
-    res.json(safeUser(req.user));
+    const updatedUser = await prisma.user.update({
+      where: { id: req.user.id || req.user._id },
+      data: { defaultCargoId: cargoId },
+    });
+    res.json(safeUser(updatedUser));
   } catch (err) {
     console.error("setDefaultCargo error", err);
     res.status(500).json({ message: "Тохиргоо хадгалахад алдаа гарлаа" });
@@ -47,22 +51,29 @@ async function requestCards(req, res) {
     const totalAmount = quantity * PRICE_PER_CARD;
 
     // Settings-аас дансны мэдээлэл авах
-    const settings = await Settings.findOne({ key: "default" });
+    const settings = await prisma.settings.findUnique({ where: { key: "default" } });
 
     // Хүсэлт үүсгэх
-    const cardRequest = await CardRequest.create({
-      userId: req.user._id,
-      quantity,
-      pricePerCard: PRICE_PER_CARD,
-      totalAmount,
-      paymentInfo: {
-        bankName: settings?.bankName || "",
-        bankAccount: settings?.bankAccount || "",
-        bankOwner: settings?.bankOwner || "",
+    const cardRequest = await prisma.cardRequest.create({
+      data: {
+        userId: req.user.id || req.user._id,
+        quantity,
+        pricePerCard: PRICE_PER_CARD,
+        totalAmount,
+        transactionNumber: transactionNumber?.trim() || "",
+        paymentProof: paymentProof || undefined,
+        status: "pending",
+        paymentInfo: {
+          create: {
+            bankName: settings?.bankName || "",
+            bankAccount: settings?.bankAccount || "",
+            bankOwner: settings?.bankOwner || "",
+          },
+        },
       },
-      transactionNumber: transactionNumber?.trim() || "",
-      paymentProof: paymentProof || undefined,
-      status: "pending",
+      include: {
+        paymentInfo: true,
+      },
     });
 
     res.status(201).json(cardRequest);
@@ -77,9 +88,14 @@ async function requestCards(req, res) {
  */
 async function getMyCardRequests(req, res) {
   try {
-    const requests = await CardRequest.find({ userId: req.user._id })
-      .sort({ createdAt: -1 })
-      .limit(50);
+    const requests = await prisma.cardRequest.findMany({
+      where: { userId: req.user.id || req.user._id },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+      include: {
+        paymentInfo: true,
+      },
+    });
     res.json(requests);
   } catch (err) {
     console.error("getMyCardRequests error", err);
@@ -92,10 +108,20 @@ async function getMyCardRequests(req, res) {
  */
 async function getMyCardTransactions(req, res) {
   try {
-    const transactions = await CardTransaction.find({ userId: req.user._id })
-      .populate("orderId", "status items")
-      .sort({ createdAt: -1 })
-      .limit(100);
+    const transactions = await prisma.cardTransaction.findMany({
+      where: { userId: req.user.id || req.user._id },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+      include: {
+        order: {
+          select: {
+            id: true,
+            status: true,
+            items: true,
+          },
+        },
+      },
+    });
     res.json(transactions);
   } catch (err) {
     console.error("getMyCardTransactions error", err);

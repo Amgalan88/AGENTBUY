@@ -1,7 +1,6 @@
 const jwt = require("jsonwebtoken");
-const User = require("../models/userModel");
+const { prisma } = require("../config/db");
 const { ROLES } = require("../constants/roles");
-const AgentProfile = require("../models/agentProfileModel");
 
 async function authRequired(req, res, next) {
   try {
@@ -10,7 +9,7 @@ async function authRequired(req, res, next) {
       return res.status(401).json({ message: "Нэвтрээгүй байна" });
     }
     const payload = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(payload.sub);
+    const user = await prisma.user.findUnique({ where: { id: payload.sub } });
     if (!user) {
       return res.status(401).json({ message: "Хэрэглэгч олдсонгүй" });
     }
@@ -63,7 +62,8 @@ function extractToken(req) {
 
 async function ensureAgentVerified(req, res, next) {
   try {
-    const profile = await AgentProfile.findOne({ userId: req.user._id });
+    const userId = req.user.id || req.user._id;
+    const profile = await prisma.agentProfile.findUnique({ where: { userId } });
     if (!profile || profile.verificationStatus !== "verified") {
       return res.status(403).json({ message: "Агент баталгаажаагүй" });
     }

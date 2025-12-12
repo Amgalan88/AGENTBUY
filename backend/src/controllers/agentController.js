@@ -1,4 +1,4 @@
-const Order = require("../models/orderModel");
+const { prisma } = require("../config/db");
 const { assertTransition, ORDER_STATUS } = require("../services/orderStateService");
 const { getIO } = require("../socket");
 const { normalizeItemImages, uploadImages } = require("../services/cloudinaryService");
@@ -13,19 +13,38 @@ const TRACK_ALLOWED = [
 ];
 
 async function listAvailable(_req, res) {
-  const orders = await Order.find({
-    status: ORDER_STATUS.PUBLISHED,
-    "lock.lockedByAgentId": { $exists: false },
-  })
-    .populate("cargoId")
-    .sort({ createdAt: -1 });
+  const orders = await prisma.order.findMany({
+    where: {
+      status: ORDER_STATUS.PUBLISHED,
+      lock: null,
+    },
+    include: {
+      cargo: true,
+      items: true,
+    },
+    orderBy: { createdAt: "desc" },
+  });
   res.json(orders);
 }
 
 async function getOrder(req, res) {
-  const order = await Order.findById(req.params.id).populate("cargoId");
+  const order = await prisma.order.findUnique({
+    where: { id: req.params.id },
+    include: {
+      cargo: true,
+      items: true,
+      lock: true,
+      report: {
+        include: {
+          items: true,
+          pricing: true,
+        },
+      },
+    },
+  });
   if (!order) return res.status(404).json({ message: "Захиалга олдсонгүй" });
-  const isMine = order.agentId?.equals(req.user._id);
+  const userId = req.user.id || req.user._id;
+  const isMine = order.agentId === userId;
   const isPublic = order.status === ORDER_STATUS.PUBLISHED;
   if (!isMine && !isPublic) {
     return res.status(403).json({ message: "Энэ захиалгад нэвтрэх эрхгүй" });
@@ -34,13 +53,24 @@ async function getOrder(req, res) {
 }
 
 async function listMyOrders(req, res) {
-  const orders = await Order.find({ agentId: req.user._id }).populate("cargoId").sort({ createdAt: -1 });
+  const userId = req.user.id || req.user._id;
+  const orders = await prisma.order.findMany({
+    where: { agentId: userId },
+    include: {
+      cargo: true,
+      items: true,
+    },
+    orderBy: { createdAt: "desc" },
+  });
   res.json(orders);
 }
 
 async function lockOrder(req, res) {
   try {
-    const order = await Order.findById(req.params.id);
+    const order = await prisma.order.findUnique({
+      where: { id: req.params.id },
+      include: { lock: true },
+    });
     if (!order) return res.status(404).json({ message: "Захиалга олдсонгүй" });
 
     assertTransition(order.status, ORDER_STATUS.AGENT_LOCKED, "agent");
@@ -48,23 +78,36 @@ async function lockOrder(req, res) {
       return res.status(400).json({ message: "Өөр агент түгжсэн байна" });
     }
 
-    order.agentId = req.user._id;
+    const userId = req.user.id || req.user._id;
     const now = new Date();
     const expires = new Date(now.getTime() + RESEARCH_LOCK_HOURS * 60 * 60 * 1000);
-    order.lock = {
-      lockedByAgentId: req.user._id,
-      lockedAt: now,
-      expiresAt: expires,
-      extensionCount: 0,
-    };
-    order.status = ORDER_STATUS.AGENT_LOCKED;
-    await order.save();
+    
+    const updatedOrder = await prisma.order.update({
+      where: { id: order.id },
+      data: {
+        agentId: userId,
+        status: ORDER_STATUS.AGENT_LOCKED,
+        lock: {
+          create: {
+            lockedByAgentId: userId,
+            lockedAt: now,
+            expiresAt: expires,
+            extensionCount: 0,
+          },
+        },
+      },
+      include: {
+        lock: true,
+        cargo: true,
+        items: true,
+      },
+    });
 
     try {
-      getIO().emit("order:update", { orderId: order._id, status: order.status, lock: true });
+      getIO().emit("order:update", { orderId: order.id, status: updatedOrder.status, lock: true });
     } catch (e) {}
 
-    res.json(order);
+    res.json(updatedOrder);
   } catch (err) {
     console.error("lockOrder error", err);
     res.status(err.statusCode || 500).json({ message: err.message || "Системийн алдаа" });
@@ -73,18 +116,25 @@ async function lockOrder(req, res) {
 
 async function startResearch(req, res) {
   try {
-    const order = await Order.findById(req.params.id);
+    const userId = req.user.id || req.user._id;
+    const order = await prisma.order.findUnique({
+      where: { id: req.params.id },
+      include: { lock: true },
+    });
     if (!order) return res.status(404).json({ message: "Захиалга олдсонгүй" });
-    if (!order.lock?.lockedByAgentId?.equals(req.user._id)) {
+    if (order.lock?.lockedByAgentId !== userId) {
       return res.status(403).json({ message: "Түгжээгүй захиалга" });
     }
     assertTransition(order.status, ORDER_STATUS.AGENT_RESEARCHING, "agent");
-    order.status = ORDER_STATUS.AGENT_RESEARCHING;
-    await order.save();
+    const updatedOrder = await prisma.order.update({
+      where: { id: order.id },
+      data: { status: ORDER_STATUS.AGENT_RESEARCHING },
+      include: { items: true, cargo: true },
+    });
     try {
-      getIO().emit("order:update", { orderId: order._id, status: order.status });
+      getIO().emit("order:update", { orderId: order.id, status: updatedOrder.status });
     } catch (e) {}
-    res.json(order);
+    res.json(updatedOrder);
   } catch (err) {
     console.error("startResearch error", err);
     res.status(err.statusCode || 500).json({ message: err.message || "Системийн алдаа" });
@@ -93,14 +143,18 @@ async function startResearch(req, res) {
 
 async function submitReport(req, res) {
   try {
-    const order = await Order.findById(req.params.id);
+    const userId = req.user.id || req.user._id;
+    const order = await prisma.order.findUnique({
+      where: { id: req.params.id },
+      include: { lock: true, report: true },
+    });
     if (!order) return res.status(404).json({ message: "Захиалга олдсонгүй" });
-    if (!order.lock?.lockedByAgentId?.equals(req.user._id)) {
+    if (order.lock?.lockedByAgentId !== userId) {
       return res.status(403).json({ message: "Түгжээгүй захиалга" });
     }
     assertTransition(order.status, ORDER_STATUS.REPORT_SUBMITTED, "agent");
 
-    const { items = [], pricing = {}, paymentLink } = req.body;
+    const { items = [], pricing = {}, paymentLink, agentComment } = req.body;
     
     // Зурагнуудыг Cloudinary-д upload хийх (base64 string-уудыг URL болгох)
     let normalizedItems;
@@ -127,20 +181,105 @@ async function submitReport(req, res) {
       return res.status(500).json({ message: "Зургуудыг upload хийхэд алдаа гарлаа. Дахин оролдоно уу." });
     }
     
-    order.report = {
-      items: normalizedItems,
-      pricing,
-      paymentLink,
-      submittedAt: new Date(),
-    };
-    order.status = ORDER_STATUS.WAITING_USER_REVIEW;
-    await order.save();
+    // Report үүсгэх эсвэл шинэчлэх
+    if (order.report) {
+      // Хуучин report items болон pricing-ийг устгах
+      await prisma.orderReportItem.deleteMany({ where: { reportId: order.report.id } });
+      if (order.report.pricing) {
+        await prisma.orderReportPricing.delete({ where: { reportId: order.report.id } });
+      }
+      
+      // Report шинэчлэх
+      await prisma.orderReport.update({
+        where: { id: order.report.id },
+        data: {
+          paymentLink,
+          agentComment,
+          submittedAt: new Date(),
+          items: {
+            create: normalizedItems.map(item => ({
+              title: item.title,
+              imageUrl: item.imageUrl,
+              sourceUrl: item.sourceUrl,
+              quantity: item.quantity,
+              agentPrice: item.agentPrice,
+              agentCurrency: item.agentCurrency || "CNY",
+              agentTotal: item.agentTotal,
+              note: item.note,
+              images: item.images || [],
+              trackingCode: item.trackingCode,
+            })),
+          },
+          pricing: {
+            create: {
+              productTotalCny: pricing.productTotalCny,
+              domesticShippingCny: pricing.domesticShippingCny,
+              serviceFeeCny: pricing.serviceFeeCny,
+              otherFeesCny: pricing.otherFeesCny,
+              grandTotalCny: pricing.grandTotalCny,
+              exchangeRate: pricing.exchangeRate,
+              grandTotalMnt: pricing.grandTotalMnt,
+            },
+          },
+        },
+      });
+    } else {
+      // Шинэ report үүсгэх
+      await prisma.orderReport.create({
+        data: {
+          orderId: order.id,
+          paymentLink,
+          agentComment,
+          submittedAt: new Date(),
+          items: {
+            create: normalizedItems.map(item => ({
+              title: item.title,
+              imageUrl: item.imageUrl,
+              sourceUrl: item.sourceUrl,
+              quantity: item.quantity,
+              agentPrice: item.agentPrice,
+              agentCurrency: item.agentCurrency || "CNY",
+              agentTotal: item.agentTotal,
+              note: item.note,
+              images: item.images || [],
+              trackingCode: item.trackingCode,
+            })),
+          },
+          pricing: {
+            create: {
+              productTotalCny: pricing.productTotalCny,
+              domesticShippingCny: pricing.domesticShippingCny,
+              serviceFeeCny: pricing.serviceFeeCny,
+              otherFeesCny: pricing.otherFeesCny,
+              grandTotalCny: pricing.grandTotalCny,
+              exchangeRate: pricing.exchangeRate,
+              grandTotalMnt: pricing.grandTotalMnt,
+            },
+          },
+        },
+      });
+    }
+    
+    const updatedOrder = await prisma.order.update({
+      where: { id: order.id },
+      data: { status: ORDER_STATUS.WAITING_USER_REVIEW },
+      include: {
+        report: {
+          include: {
+            items: true,
+            pricing: true,
+          },
+        },
+        items: true,
+        cargo: true,
+      },
+    });
 
     try {
-      getIO().emit("order:update", { orderId: order._id, status: order.status });
+      getIO().emit("order:update", { orderId: order.id, status: updatedOrder.status });
     } catch (e) {}
 
-    res.json(order);
+    res.json(updatedOrder);
   } catch (err) {
     console.error("submitReport error", err);
     res.status(err.statusCode || 500).json({ message: err.message || "Системийн алдаа" });
@@ -149,22 +288,53 @@ async function submitReport(req, res) {
 
 async function updateTracking(req, res) {
   try {
-    const { code } = req.body;
-    const order = await Order.findById(req.params.id);
+    const { code, carrierName, lastStatus } = req.body;
+    const userId = req.user.id || req.user._id;
+    const order = await prisma.order.findUnique({
+      where: { id: req.params.id },
+      include: { tracking: true },
+    });
     if (!order) return res.status(404).json({ message: "Захиалга олдсонгүй" });
-    if (!order.agentId?.equals(req.user._id)) return res.status(403).json({ message: "Энэ захиалга таны биш" });
+    if (order.agentId !== userId) return res.status(403).json({ message: "Энэ захиалга таны биш" });
     if (!TRACK_ALLOWED.includes(order.status)) {
       return res.status(400).json({ 
         message: `Энэ төлөвт tracking оруулах боломжгүй. Төлөв: ${order.status}. Tracking оруулах боломжтой төлөвүүд: ${TRACK_ALLOWED.join(", ")}` 
       });
     }
-    order.tracking = order.tracking || {};
-    order.tracking.code = code || "";
-    order.tracking.lastUpdatedAt = new Date();
-    await order.save();
-    const populated = await Order.findById(order._id).populate("cargoId");
+    
+    if (order.tracking) {
+      await prisma.orderTracking.update({
+        where: { orderId: order.id },
+        data: {
+          code: code || "",
+          carrierName: carrierName || null,
+          lastStatus: lastStatus || null,
+          lastUpdatedAt: new Date(),
+        },
+      });
+    } else {
+      await prisma.orderTracking.create({
+        data: {
+          orderId: order.id,
+          code: code || "",
+          carrierName: carrierName || null,
+          lastStatus: lastStatus || null,
+          lastUpdatedAt: new Date(),
+        },
+      });
+    }
+    
+    const populated = await prisma.order.findUnique({
+      where: { id: order.id },
+      include: {
+        cargo: true,
+        tracking: true,
+        items: true,
+      },
+    });
+    
     try {
-      getIO().emit("order:update", { orderId: populated._id, status: populated.status, tracking: populated.tracking });
+      getIO().emit("order:update", { orderId: order.id, status: populated.status, tracking: populated.tracking });
     } catch (e) {}
     res.json(populated);
   } catch (err) {
@@ -176,9 +346,19 @@ async function updateTracking(req, res) {
 async function updateItemTracking(req, res) {
   try {
     const { itemIndex, code } = req.body;
-    const order = await Order.findById(req.params.id);
+    const userId = req.user.id || req.user._id;
+    const order = await prisma.order.findUnique({
+      where: { id: req.params.id },
+      include: {
+        report: {
+          include: {
+            items: true,
+          },
+        },
+      },
+    });
     if (!order) return res.status(404).json({ message: "Захиалга олдсонгүй" });
-    if (!order.agentId?.equals(req.user._id)) return res.status(403).json({ message: "Энэ захиалга таны биш" });
+    if (order.agentId !== userId) return res.status(403).json({ message: "Энэ захиалга таны биш" });
     if (!TRACK_ALLOWED.includes(order.status)) {
       return res.status(400).json({ 
         message: `Энэ төлөвт tracking оруулах боломжгүй. Төлөв: ${order.status}` 
@@ -191,11 +371,28 @@ async function updateItemTracking(req, res) {
       return res.status(400).json({ message: "Буруу барааны индекс" });
     }
     
-    order.report.items[itemIndex].trackingCode = code || "";
-    await order.save();
-    const populated = await Order.findById(order._id).populate("cargoId");
+    const reportItem = order.report.items[itemIndex];
+    await prisma.orderReportItem.update({
+      where: { id: reportItem.id },
+      data: { trackingCode: code || "" },
+    });
+    
+    const populated = await prisma.order.findUnique({
+      where: { id: order.id },
+      include: {
+        cargo: true,
+        report: {
+          include: {
+            items: true,
+            pricing: true,
+          },
+        },
+        items: true,
+      },
+    });
+    
     try {
-      getIO().emit("order:update", { orderId: populated._id, status: populated.status });
+      getIO().emit("order:update", { orderId: order.id, status: populated.status });
     } catch (e) {}
     res.json(populated);
   } catch (err) {
@@ -206,9 +403,12 @@ async function updateItemTracking(req, res) {
 
 async function addAgentComment(req, res) {
   try {
-    const order = await Order.findById(req.params.id);
+    const userId = req.user.id || req.user._id;
+    const order = await prisma.order.findUnique({
+      where: { id: req.params.id },
+    });
     if (!order) return res.status(404).json({ message: "Захиалга олдсонгүй" });
-    if (!order.agentId?.equals(req.user._id)) {
+    if (order.agentId !== userId) {
       return res.status(403).json({ message: "Энэ захиалга таны биш" });
     }
 
@@ -231,20 +431,36 @@ async function addAgentComment(req, res) {
       }
     }
 
-    order.comments = order.comments || [];
-    order.comments.push({
-      senderId: req.user._id,
-      senderRole: "agent",
-      message: hasMessage ? message.trim() : "",
-      attachments: uploadedAttachments,
+    await prisma.orderComment.create({
+      data: {
+        orderId: order.id,
+        senderId: userId,
+        senderRole: "agent",
+        message: hasMessage ? message.trim() : "",
+        attachments: uploadedAttachments,
+      },
     });
-    await order.save();
+
+    const updatedOrder = await prisma.order.findUnique({
+      where: { id: order.id },
+      include: {
+        comments: {
+          include: {
+            sender: {
+              select: { id: true, fullName: true, avatarUrl: true },
+            },
+          },
+        },
+        items: true,
+        cargo: true,
+      },
+    });
 
     try {
-      getIO().emit("order:comment", { orderId: order._id, role: "agent" });
+      getIO().emit("order:comment", { orderId: order.id, role: "agent" });
     } catch (e) {}
 
-    res.json(order);
+    res.json(updatedOrder);
   } catch (err) {
     console.error("addAgentComment error", err);
     res.status(500).json({ message: "Серверийн алдаа" });

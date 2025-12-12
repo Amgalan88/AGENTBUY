@@ -1,4 +1,4 @@
-const Order = require("../models/orderModel");
+const { prisma } = require("../config/db");
 const { ORDER_STATUS } = require("../constants/orderStatus");
 
 // Хугацаа дууссан lock-уудыг цэвэрлэх
@@ -6,19 +6,33 @@ async function cleanupExpiredLocks() {
   try {
     const now = new Date();
     
-    const result = await Order.updateMany(
-      {
-        "lock.expiresAt": { $lt: now },
-        status: { $in: [ORDER_STATUS.AGENT_LOCKED, ORDER_STATUS.AGENT_RESEARCHING] },
+    // Хугацаа дууссан lock-тай захиалгуудыг олох
+    const expiredLocks = await prisma.orderLock.findMany({
+      where: {
+        expiresAt: { lt: now },
+        order: {
+          status: { in: [ORDER_STATUS.AGENT_LOCKED, ORDER_STATUS.AGENT_RESEARCHING] },
+        },
       },
-      {
-        $set: { status: ORDER_STATUS.PUBLISHED },
-        $unset: { lock: 1, agentId: 1 },
-      }
-    );
+      include: { order: true },
+    });
 
-    if (result.modifiedCount > 0) {
-      console.log(`[CLEANUP] ${result.modifiedCount} expired locks released at ${now.toISOString()}`);
+    if (expiredLocks.length > 0) {
+      // Lock-уудыг устгах, захиалгын статусыг шинэчлэх
+      for (const lock of expiredLocks) {
+        await prisma.$transaction([
+          prisma.orderLock.delete({ where: { id: lock.id } }),
+          prisma.order.update({
+            where: { id: lock.orderId },
+            data: {
+              status: ORDER_STATUS.PUBLISHED,
+              agentId: null,
+            },
+          }),
+        ]);
+      }
+      
+      console.log(`[CLEANUP] ${expiredLocks.length} expired locks released at ${now.toISOString()}`);
     }
   } catch (err) {
     console.error("[CLEANUP] Error cleaning up expired locks:", err);

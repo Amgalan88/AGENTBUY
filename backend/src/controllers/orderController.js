@@ -1,5 +1,4 @@
-const Order = require("../models/orderModel");
-const Cargo = require("../models/cargoModel");
+const { prisma } = require("../config/db");
 const { assertTransition, ORDER_STATUS } = require("../services/orderStateService");
 const { consumeOnPublish, returnOnCancel, completeBonus } = require("../services/cardService");
 const { getIO } = require("../socket");
@@ -16,7 +15,7 @@ async function createDraft(req, res) {
     if (!cargoId) {
       return res.status(400).json({ message: "Карго сонгоно уу" });
     }
-    const cargo = await Cargo.findById(cargoId);
+    const cargo = await prisma.cargo.findUnique({ where: { id: cargoId } });
     if (!cargo) {
       return res.status(400).json({ message: "Карго олдсонгүй" });
     }
@@ -26,13 +25,34 @@ async function createDraft(req, res) {
     // normalizeItemImages алдаа гарвал null эсвэл алдаа throw хийх
     // Энэ нь зөвхөн Cloudinary URL-уудыг буцаана, base64 string-уудыг filter хийж байна
 
-    const order = await Order.create({
-      userId: req.user._id,
-      cargoId,
-      isPackage,
-      items: normalizedItems,
-      userNote,
-      status: ORDER_STATUS.DRAFT,
+    const userId = req.user.id || req.user._id;
+    const order = await prisma.order.create({
+      data: {
+        userId,
+        cargoId,
+        isPackage,
+        userNote,
+        status: ORDER_STATUS.DRAFT,
+        items: {
+          create: normalizedItems.map(item => ({
+            title: item.title,
+            imageUrl: item.imageUrl,
+            images: item.images || [],
+            sourceUrl: item.sourceUrl,
+            quantity: item.quantity || 1,
+            userNotes: item.userNotes,
+            agentPrice: item.agentPrice,
+            agentCurrency: item.agentCurrency || "CNY",
+            agentTotal: item.agentTotal,
+            packageIndex: item.packageIndex,
+            trackingCode: item.trackingCode,
+          })),
+        },
+      },
+      include: {
+        items: true,
+        cargo: true,
+      },
     });
 
     res.status(201).json(order);
@@ -44,20 +64,27 @@ async function createDraft(req, res) {
 
 async function publishOrder(req, res) {
   try {
-    const order = await Order.findOne({ _id: req.params.id, userId: req.user._id });
+    const userId = req.user.id || req.user._id;
+    const order = await prisma.order.findFirst({
+      where: { id: req.params.id, userId },
+      include: { items: true },
+    });
     if (!order) return res.status(404).json(ERR_NOT_FOUND);
 
     assertTransition(order.status, ORDER_STATUS.PUBLISHED, "user");
 
-    await consumeOnPublish(req.user, order._id, order);
-    order.status = ORDER_STATUS.PUBLISHED;
-    await order.save();
+    await consumeOnPublish(req.user, order.id, order);
+    const updatedOrder = await prisma.order.update({
+      where: { id: order.id },
+      data: { status: ORDER_STATUS.PUBLISHED },
+      include: { items: true, cargo: true },
+    });
 
     try {
-      getIO().emit("order:new", { orderId: order._id, status: order.status });
+      getIO().emit("order:new", { orderId: order.id, status: updatedOrder.status });
     } catch (e) {}
 
-    res.json(order);
+    res.json(updatedOrder);
   } catch (err) {
     console.error("publishOrder error", err);
     res.status(err.statusCode || 500).json({ message: err.message || "Серверийн алдаа" });
@@ -66,61 +93,95 @@ async function publishOrder(req, res) {
 
 async function listUserOrders(req, res) {
   const { status, limit = 50 } = req.query;
-  const filter = { userId: req.user._id };
-  if (status) filter.status = status;
-  const orders = await Order.find(filter)
-    .populate("cargoId", "name")
-    .sort({ createdAt: -1 })
-    .limit(Number(limit));
+  const userId = req.user.id || req.user._id;
+  const where = { userId };
+  if (status) where.status = status;
+  
+  const orders = await prisma.order.findMany({
+    where,
+    include: {
+      cargo: { select: { id: true, name: true } },
+      items: true,
+    },
+    orderBy: { createdAt: "desc" },
+    take: Number(limit),
+  });
   
   // Base64 string-уудыг filter хийх (зөвхөн Cloudinary URL-уудыг буцаах)
   const filteredOrders = orders.map(order => {
     const filteredItems = (order.items || []).map(item => {
-      const itemObj = item.toObject ? item.toObject() : { ...item };
-      
       // images array байвал filter хийх
-      if (itemObj.images && Array.isArray(itemObj.images)) {
+      if (item.images && Array.isArray(item.images)) {
         // Base64 string-уудыг filter хийх (зөвхөн Cloudinary URL-уудыг үлдээх)
-        const filteredImages = itemObj.images.filter(img => 
+        const filteredImages = item.images.filter(img => 
           img && 
           typeof img === "string" && 
           img.trim() !== "" &&
           !img.startsWith("data:") &&
           (img.startsWith("http://") || img.startsWith("https://"))
         );
-        return { ...itemObj, images: filteredImages };
+        return { ...item, images: filteredImages };
       }
       
       // images байхгүй эсвэл array биш бол imageUrl шалгах
-      if (!itemObj.images && itemObj.imageUrl) {
+      if (!item.images && item.imageUrl) {
         // imageUrl нь Cloudinary URL эсэх шалгах
-        if (itemObj.imageUrl && 
-            typeof itemObj.imageUrl === "string" && 
-            !itemObj.imageUrl.startsWith("data:") &&
-            (itemObj.imageUrl.startsWith("http://") || itemObj.imageUrl.startsWith("https://"))) {
+        if (item.imageUrl && 
+            typeof item.imageUrl === "string" && 
+            !item.imageUrl.startsWith("data:") &&
+            (item.imageUrl.startsWith("http://") || item.imageUrl.startsWith("https://"))) {
           // imageUrl-ийг images array болгох
-          return { ...itemObj, images: [itemObj.imageUrl] };
+          return { ...item, images: [item.imageUrl] };
         }
       }
       
       // images байхгүй бол хоосон array буцаах (undefined биш)
-      return { ...itemObj, images: itemObj.images || [] };
+      return { ...item, images: item.images || [] };
     });
-    return { ...order.toObject(), items: filteredItems };
+    return { ...order, items: filteredItems };
   });
   
   res.json(filteredOrders);
 }
 
 async function getOrderDetail(req, res) {
-  const order = await Order.findOne({ _id: req.params.id, userId: req.user._id }).populate("cargoId");
+  const userId = req.user.id || req.user._id;
+  const order = await prisma.order.findFirst({
+    where: { id: req.params.id, userId },
+    include: {
+      cargo: true,
+      items: true,
+      lock: true,
+      pricing: true,
+      payment: true,
+      tracking: true,
+      report: {
+        include: {
+          items: true,
+          pricing: true,
+        },
+      },
+      comments: {
+        include: {
+          sender: {
+            select: { id: true, fullName: true, avatarUrl: true },
+          },
+        },
+      },
+      ratings: true,
+    },
+  });
   if (!order) return res.status(404).json(ERR_NOT_FOUND);
   res.json(order);
 }
 
 async function cancelBeforeAgent(req, res) {
   try {
-    const order = await Order.findOne({ _id: req.params.id, userId: req.user._id });
+    const userId = req.user.id || req.user._id;
+    const order = await prisma.order.findFirst({
+      where: { id: req.params.id, userId },
+      include: { lock: true },
+    });
     if (!order) return res.status(404).json(ERR_NOT_FOUND);
 
     if (order.lock?.lockedByAgentId) {
@@ -128,20 +189,22 @@ async function cancelBeforeAgent(req, res) {
     }
     assertTransition(order.status, ORDER_STATUS.CANCELLED_BY_USER, "user");
 
-    await returnOnCancel(req.user, order._id);
-    order.status = ORDER_STATUS.CANCELLED_BY_USER;
-    await order.save();
+    await returnOnCancel(req.user, order.id);
+    const updatedOrder = await prisma.order.update({
+      where: { id: order.id },
+      data: { status: ORDER_STATUS.CANCELLED_BY_USER },
+      include: { cargo: true, items: true },
+    });
 
-    const populated = await Order.findById(order._id).populate("cargoId");
     try {
       getIO().emit("order:update", { 
-        orderId: order._id.toString(),
-        status: order.status,
-        order: populated.toObject ? populated.toObject() : populated
+        orderId: order.id,
+        status: updatedOrder.status,
+        order: updatedOrder,
       });
     } catch (e) {}
 
-    res.json(order);
+    res.json(updatedOrder);
   } catch (err) {
     console.error("cancelBeforeAgent error", err);
     res.status(err.statusCode || 500).json({ message: err.message || "Серверийн алдаа" });
@@ -150,17 +213,22 @@ async function cancelBeforeAgent(req, res) {
 
 async function cancelAfterReport(req, res) {
   try {
-    const order = await Order.findOne({ _id: req.params.id, userId: req.user._id });
+    const userId = req.user.id || req.user._id;
+    const order = await prisma.order.findFirst({
+      where: { id: req.params.id, userId },
+    });
     if (!order) return res.status(404).json(ERR_NOT_FOUND);
     assertTransition(order.status, ORDER_STATUS.USER_REJECTED, "user");
 
-    order.status = ORDER_STATUS.USER_REJECTED;
-    await order.save();
+    const updatedOrder = await prisma.order.update({
+      where: { id: order.id },
+      data: { status: ORDER_STATUS.USER_REJECTED },
+    });
 
     try {
-      getIO().emit("order:update", { orderId: order._id, status: order.status });
+      getIO().emit("order:update", { orderId: order.id, status: updatedOrder.status });
     } catch (e) {}
-    res.json(order);
+    res.json(updatedOrder);
   } catch (err) {
     console.error("cancelAfterReport error", err);
     res.status(err.statusCode || 500).json({ message: err.message || "Серверийн алдаа" });
@@ -169,20 +237,42 @@ async function cancelAfterReport(req, res) {
 
 async function acceptReport(req, res) {
   try {
-    const order = await Order.findOne({ _id: req.params.id, userId: req.user._id });
+    const userId = req.user.id || req.user._id;
+    const order = await prisma.order.findFirst({
+      where: { id: req.params.id, userId },
+      include: { payment: true },
+    });
     if (!order) return res.status(404).json(ERR_NOT_FOUND);
     assertTransition(order.status, ORDER_STATUS.WAITING_PAYMENT, "user");
 
-    order.status = ORDER_STATUS.WAITING_PAYMENT;
-    order.payment = order.payment || {};
-    order.payment.deadline = order.payment.deadline || new Date(Date.now() + 1000 * 60 * 60 * 24);
-    await order.save();
+    const deadline = order.payment?.deadline || new Date(Date.now() + 1000 * 60 * 60 * 24);
+    
+    // Payment-ийг тусад нь upsert хийх
+    if (order.payment) {
+      await prisma.orderPayment.update({
+        where: { orderId: order.id },
+        data: { deadline },
+      });
+    } else {
+      await prisma.orderPayment.create({
+        data: {
+          orderId: order.id,
+          deadline,
+        },
+      });
+    }
+    
+    const updatedOrder = await prisma.order.update({
+      where: { id: order.id },
+      data: { status: ORDER_STATUS.WAITING_PAYMENT },
+      include: { payment: true },
+    });
 
     try {
-      getIO().emit("order:update", { orderId: order._id, status: order.status });
+      getIO().emit("order:update", { orderId: order.id, status: updatedOrder.status });
     } catch (e) {}
 
-    res.json(order);
+    res.json(updatedOrder);
   } catch (err) {
     console.error("acceptReport error", err);
     res.status(err.statusCode || 500).json({ message: err.message || "Серверийн алдаа" });
@@ -191,19 +281,24 @@ async function acceptReport(req, res) {
 
 async function confirmCompleted(req, res) {
   try {
-    const order = await Order.findOne({ _id: req.params.id, userId: req.user._id });
+    const userId = req.user.id || req.user._id;
+    const order = await prisma.order.findFirst({
+      where: { id: req.params.id, userId },
+    });
     if (!order) return res.status(404).json(ERR_NOT_FOUND);
     assertTransition(order.status, ORDER_STATUS.COMPLETED, "user");
 
-    order.status = ORDER_STATUS.COMPLETED;
-    await order.save();
-    await completeBonus(req.user, order._id);
+    const updatedOrder = await prisma.order.update({
+      where: { id: order.id },
+      data: { status: ORDER_STATUS.COMPLETED },
+    });
+    await completeBonus(req.user, order.id);
 
     try {
-      getIO().emit("order:update", { orderId: order._id, status: order.status });
+      getIO().emit("order:update", { orderId: order.id, status: updatedOrder.status });
     } catch (e) {}
 
-    res.json(order);
+    res.json(updatedOrder);
   } catch (err) {
     console.error("confirmCompleted error", err);
     res.status(err.statusCode || 500).json({ message: err.message || "Серверийн алдаа" });
@@ -212,7 +307,10 @@ async function confirmCompleted(req, res) {
 
 async function addComment(req, res) {
   try {
-    const order = await Order.findOne({ _id: req.params.id, userId: req.user._id });
+    const userId = req.user.id || req.user._id;
+    const order = await prisma.order.findFirst({
+      where: { id: req.params.id, userId },
+    });
     if (!order) return res.status(404).json(ERR_NOT_FOUND);
 
     const { message = "", attachments = [] } = req.body;
@@ -234,20 +332,31 @@ async function addComment(req, res) {
       }
     }
 
-    order.comments = order.comments || [];
-    order.comments.push({
-      senderId: req.user._id,
-      senderRole: "user",
-      message: hasMessage ? message.trim() : "",
-      attachments: uploadedAttachments,
+    const comment = await prisma.orderComment.create({
+      data: {
+        orderId: order.id,
+        senderId: userId,
+        senderRole: "user",
+        message: hasMessage ? message.trim() : "",
+        attachments: uploadedAttachments,
+      },
+      include: {
+        sender: {
+          select: { id: true, fullName: true, avatarUrl: true },
+        },
+      },
     });
-    await order.save();
+
+    const updatedOrder = await prisma.order.findUnique({
+      where: { id: order.id },
+      include: { comments: { include: { sender: { select: { id: true, fullName: true, avatarUrl: true } } } } },
+    });
 
     try {
-      getIO().emit("order:comment", { orderId: order._id, role: "user" });
+      getIO().emit("order:comment", { orderId: order.id, role: "user" });
     } catch (e) {}
 
-    res.json(order);
+    res.json(updatedOrder);
   } catch (err) {
     console.error("addComment error", err);
     res.status(500).json({ message: "Серверийн алдаа" });
@@ -256,18 +365,24 @@ async function addComment(req, res) {
 
 async function updateOrderName(req, res) {
   try {
-    const order = await Order.findOne({ _id: req.params.id, userId: req.user._id });
+    const userId = req.user.id || req.user._id;
+    const order = await prisma.order.findFirst({
+      where: { id: req.params.id, userId },
+    });
     if (!order) return res.status(404).json(ERR_NOT_FOUND);
 
     const { customName } = req.body;
-    order.customName = customName ? customName.trim() : null;
-    await order.save();
+    const updatedOrder = await prisma.order.update({
+      where: { id: order.id },
+      data: { customName: customName ? customName.trim() : null },
+      include: { items: true, cargo: true },
+    });
 
     try {
-      getIO().emit("order:update", { orderId: order._id, order });
+      getIO().emit("order:update", { orderId: order.id, order: updatedOrder });
     } catch (e) {}
 
-    res.json(order);
+    res.json(updatedOrder);
   } catch (err) {
     console.error("updateOrderName error", err);
     res.status(500).json({ message: "Серверийн алдаа" });
@@ -276,7 +391,11 @@ async function updateOrderName(req, res) {
 
 async function updateDraft(req, res) {
   try {
-    const order = await Order.findOne({ _id: req.params.id, userId: req.user._id });
+    const userId = req.user.id || req.user._id;
+    const order = await prisma.order.findFirst({
+      where: { id: req.params.id, userId },
+      include: { items: true },
+    });
     if (!order) return res.status(404).json(ERR_NOT_FOUND);
 
     // Зөвхөн ноорог захиалгыг засах боломжтой
@@ -285,12 +404,33 @@ async function updateDraft(req, res) {
     }
 
     const { items, cargoId, userNote } = req.body;
+    const updateData = {};
     
     if (items && Array.isArray(items) && items.length > 0) {
       try {
         // Cloudinary-д зураг upload хийх (зөвхөн Cloudinary URL-уудыг хадгалах)
         const normalizedItems = await normalizeItemImages(items, { folder: "agentbuy/orders" });
-        order.items = normalizedItems;
+        
+        // Хуучин items-ийг устгах
+        await prisma.orderItem.deleteMany({ where: { orderId: order.id } });
+        
+        // Шинэ items үүсгэх
+        await prisma.orderItem.createMany({
+          data: normalizedItems.map(item => ({
+            orderId: order.id,
+            title: item.title,
+            imageUrl: item.imageUrl,
+            images: item.images || [],
+            sourceUrl: item.sourceUrl,
+            quantity: item.quantity || 1,
+            userNotes: item.userNotes,
+            agentPrice: item.agentPrice,
+            agentCurrency: item.agentCurrency || "CNY",
+            agentTotal: item.agentTotal,
+            packageIndex: item.packageIndex,
+            trackingCode: item.trackingCode,
+          })),
+        });
       } catch (uploadErr) {
         console.error("updateDraft: normalizeItemImages error", uploadErr);
         // Зураг upload хийхэд алдаа гарвал items-ийг шууд хадгалах (base64-г хадгалахгүй)
@@ -311,29 +451,53 @@ async function updateDraft(req, res) {
           }
           return filtered;
         });
-        order.items = filteredItems;
+        
+        // Хуучин items-ийг устгах
+        await prisma.orderItem.deleteMany({ where: { orderId: order.id } });
+        
+        // Шинэ items үүсгэх
+        await prisma.orderItem.createMany({
+          data: filteredItems.map(item => ({
+            orderId: order.id,
+            title: item.title,
+            imageUrl: item.imageUrl,
+            images: item.images || [],
+            sourceUrl: item.sourceUrl,
+            quantity: item.quantity || 1,
+            userNotes: item.userNotes,
+            agentPrice: item.agentPrice,
+            agentCurrency: item.agentCurrency || "CNY",
+            agentTotal: item.agentTotal,
+            packageIndex: item.packageIndex,
+            trackingCode: item.trackingCode,
+          })),
+        });
       }
     }
 
     if (cargoId) {
-      const cargo = await Cargo.findById(cargoId);
+      const cargo = await prisma.cargo.findUnique({ where: { id: cargoId } });
       if (!cargo) {
         return res.status(400).json({ message: "Карго олдсонгүй" });
       }
-      order.cargoId = cargoId;
+      updateData.cargoId = cargoId;
     }
 
     if (userNote !== undefined) {
-      order.userNote = userNote ? userNote.trim() : null;
+      updateData.userNote = userNote ? userNote.trim() : null;
     }
 
-    await order.save();
+    const updatedOrder = await prisma.order.update({
+      where: { id: order.id },
+      data: updateData,
+      include: { items: true, cargo: true },
+    });
 
     try {
-      getIO().emit("order:update", { orderId: order._id, order });
+      getIO().emit("order:update", { orderId: order.id, order: updatedOrder });
     } catch (e) {}
 
-    res.json(order);
+    res.json(updatedOrder);
   } catch (err) {
     console.error("updateDraft error", err);
     res.status(500).json({ message: err.message || "Серверийн алдаа" });
@@ -342,8 +506,11 @@ async function updateDraft(req, res) {
 
 async function deleteOrder(req, res) {
   try {
-    console.log("[Delete] Received delete request for order:", req.params.id, "from user:", req.user._id);
-    const order = await Order.findOne({ _id: req.params.id, userId: req.user._id });
+    const userId = req.user.id || req.user._id;
+    console.log("[Delete] Received delete request for order:", req.params.id, "from user:", userId);
+    const order = await prisma.order.findFirst({
+      where: { id: req.params.id, userId },
+    });
     if (!order) {
       console.log("[Delete] Order not found:", req.params.id);
       return res.status(404).json(ERR_NOT_FOUND);
@@ -367,13 +534,13 @@ async function deleteOrder(req, res) {
       });
     }
 
-    // Захиалгыг MongoDB-аас бүрэн устгах
+    // Захиалгыг database-аас бүрэн устгах (cascade delete ашиглана)
     console.log("[Delete] Deleting order from database...");
-    await Order.findByIdAndDelete(order._id);
+    await prisma.order.delete({ where: { id: order.id } });
     console.log("[Delete] Order deleted successfully");
 
     try {
-      getIO().emit("order:delete", { orderId: order._id });
+      getIO().emit("order:delete", { orderId: order.id });
       console.log("[Delete] Socket event emitted");
     } catch (e) {
       console.error("Socket emit error:", e);

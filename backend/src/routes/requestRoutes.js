@@ -1,16 +1,22 @@
 // backend/src/routes/requestRoutes.js
 const express = require("express");
-const Request = require("../models/requestModel");
-const { Types } = require("mongoose");
+const { prisma } = require("../config/db");
 const { normalizeItemImages, uploadImage } = require("../services/cloudinaryService");
 
 const loadRequest = async (id) => {
-    if (!Types.ObjectId.isValid(id)) {
-        const err = new Error("Invalid id");
-        err.statusCode = 400;
-        throw err;
+    try {
+        return await prisma.request.findUnique({
+            where: { id },
+            include: {
+                items: true,
+                report: true,
+            },
+        });
+    } catch (err) {
+        const error = new Error("Invalid id");
+        error.statusCode = 400;
+        throw error;
     }
-    return Request.findById(id);
 };
 const router = express.Router();
 
@@ -25,11 +31,26 @@ router.post("/", async (req, res) => {
 
         const normalizedItems = await normalizeItemImages(items);
 
-        const newRequest = await Request.create({
-            type,
-            items: normalizedItems,
-            urgency: urgency || "normal",
-            status: "new",
+        const newRequest = await prisma.request.create({
+            data: {
+                type,
+                urgency: urgency || "normal",
+                status: "new",
+                items: {
+                    create: normalizedItems.map(item => ({
+                        name: item.name,
+                        mark: item.mark,
+                        quantity: item.quantity,
+                        app: item.app,
+                        note: item.note,
+                        link: item.link,
+                        images: item.images || [],
+                    })),
+                },
+            },
+            include: {
+                items: true,
+            },
         });
 
         res.status(201).json(newRequest);
@@ -43,13 +64,24 @@ router.post("/", async (req, res) => {
 router.get("/", async (req, res) => {
     try {
         const { status, type, app } = req.query;
-        const filter = {};
+        const where = {};
 
-        if (status) filter.status = status;
-        if (type) filter.type = type;
-        if (app) filter["items.app"] = app;
+        if (status) where.status = status;
+        if (type) where.type = type;
+        if (app) {
+            where.items = {
+                some: { app },
+            };
+        }
 
-        const requests = await Request.find(filter).sort({ createdAt: -1 });
+        const requests = await prisma.request.findMany({
+            where,
+            include: {
+                items: true,
+                report: true,
+            },
+            orderBy: { createdAt: "desc" },
+        });
         res.json(requests);
     } catch (err) {
         console.error("Get requests error:", err);
@@ -87,13 +119,21 @@ router.post("/:id/claim", async (req, res) => {
         const until = new Date();
         until.setHours(until.getHours() + hours);
 
-        request.claimedBy = req.body.agentId || "agent";
-        request.claimedAt = new Date();
-        request.researchUntil = until;
-        request.status = "researching";
-        await request.save();
+        const updatedRequest = await prisma.request.update({
+            where: { id: request.id },
+            data: {
+                claimedBy: req.body.agentId || "agent",
+                claimedAt: new Date(),
+                researchUntil: until,
+                status: "researching",
+            },
+            include: {
+                items: true,
+                report: true,
+            },
+        });
 
-        res.json(request);
+        res.json(updatedRequest);
     } catch (err) {
         console.error("Claim request error:", err);
         const code = err.statusCode || 500;
@@ -112,19 +152,47 @@ router.post("/:id/report", async (req, res) => {
 
         const { priceCny, note, link, paymentLink, image } = req.body;
         const uploadedImage = await uploadImage(image);
-        request.report = {
-            priceCny,
-            note,
-            link,
-            paymentLink,
-            image: uploadedImage,
-            submittedAt: new Date(),
-        };
-        request.status = "proposal_sent";
-        request.paymentConfirmed = false;
-        await request.save();
+        
+        // Report үүсгэх эсвэл шинэчлэх
+        if (request.report) {
+            await prisma.requestReport.update({
+                where: { requestId: request.id },
+                data: {
+                    priceCny,
+                    note,
+                    link,
+                    paymentLink,
+                    image: uploadedImage,
+                    submittedAt: new Date(),
+                },
+            });
+        } else {
+            await prisma.requestReport.create({
+                data: {
+                    requestId: request.id,
+                    priceCny,
+                    note,
+                    link,
+                    paymentLink,
+                    image: uploadedImage,
+                    submittedAt: new Date(),
+                },
+            });
+        }
+        
+        const updatedRequest = await prisma.request.update({
+            where: { id: request.id },
+            data: {
+                status: "proposal_sent",
+                paymentConfirmed: false,
+            },
+            include: {
+                items: true,
+                report: true,
+            },
+        });
 
-        res.json(request);
+        res.json(updatedRequest);
     } catch (err) {
         console.error("Report submit error:", err);
         const code = err.statusCode || 500;
@@ -143,9 +211,15 @@ router.post("/:id/rate", async (req, res) => {
             return res.status(400).json({ message: "Rating must be between 0 and 5" });
         }
 
-        request.rating = rating;
-        await request.save();
-        res.json(request);
+        const updatedRequest = await prisma.request.update({
+            where: { id: request.id },
+            data: { rating },
+            include: {
+                items: true,
+                report: true,
+            },
+        });
+        res.json(updatedRequest);
     } catch (err) {
         console.error("Rate request error:", err);
         const code = err.statusCode || 500;
@@ -160,11 +234,19 @@ router.post("/:id/pay", async (req, res) => {
         if (!request) return res.status(404).json({ message: "Request not found" });
         if (!request.report) return res.status(400).json({ message: "Report not submitted yet" });
 
-        request.paymentConfirmed = true;
-        request.paymentAt = new Date();
-        request.status = "closed_success";
-        await request.save();
-        res.json(request);
+        const updatedRequest = await prisma.request.update({
+            where: { id: request.id },
+            data: {
+                paymentConfirmed: true,
+                paymentAt: new Date(),
+                status: "closed_success",
+            },
+            include: {
+                items: true,
+                report: true,
+            },
+        });
+        res.json(updatedRequest);
     } catch (err) {
         console.error("Pay request error:", err);
         const code = err.statusCode || 500;
@@ -178,10 +260,18 @@ router.post("/:id/cancel", async (req, res) => {
         const request = await loadRequest(req.params.id);
         if (!request) return res.status(404).json({ message: "Request not found" });
 
-        request.status = "closed_cancelled";
-        request.paymentConfirmed = false;
-        await request.save();
-        res.json(request);
+        const updatedRequest = await prisma.request.update({
+            where: { id: request.id },
+            data: {
+                status: "closed_cancelled",
+                paymentConfirmed: false,
+            },
+            include: {
+                items: true,
+                report: true,
+            },
+        });
+        res.json(updatedRequest);
     } catch (err) {
         console.error("Cancel request error:", err);
         const code = err.statusCode || 500;

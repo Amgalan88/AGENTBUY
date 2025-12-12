@@ -5,7 +5,7 @@ const express = require("express");
 const http = require("http");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
-const connectDB = require("./config/db");
+const { connectDB } = require("./config/db");
 const requestRoutes = require("./routes/requestRoutes");
 const authRoutes = require("./routes/authRoutes");
 const userRoutes = require("./routes/userRoutes");
@@ -19,9 +19,16 @@ const { apiLimiter } = require("./middlewares/rateLimiter");
 const { errorHandler } = require("./middlewares/errorHandler");
 const { initLockCleanup } = require("./utils/lockCleanup");
 
-connectDB();
-ensureBaseCargo().catch((err) => console.error("Seed error", err));
-ensureAdmin().catch((err) => console.error("Admin seed error", err));
+// Connect to database and seed
+connectDB()
+  .then(() => {
+    ensureBaseCargo().catch((err) => console.error("Seed error", err));
+    ensureAdmin().catch((err) => console.error("Admin seed error", err));
+  })
+  .catch((err) => {
+    console.error("Database connection error:", err);
+    process.exit(1);
+  });
 
 const app = express();
 const httpServer = http.createServer(app);
@@ -73,3 +80,17 @@ initSocket(httpServer, ALLOWED_ORIGINS);
 initLockCleanup(); // Lock автоматаар цэвэрлэх
 
 httpServer.listen(PORT, () => console.log("Server running on", PORT));
+
+// Handle port already in use error gracefully
+httpServer.on("error", (err) => {
+  if (err.code === "EADDRINUSE") {
+    console.error(`\n❌ Port ${PORT} is already in use!`);
+    console.error("Please stop the existing server or kill the process:");
+    console.error(`  lsof -ti:${PORT} | xargs kill -9`);
+    console.error("Or run: ./kill-port.sh\n");
+    process.exit(1);
+  } else {
+    console.error("Server error:", err);
+    process.exit(1);
+  }
+});

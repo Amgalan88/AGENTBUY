@@ -1,139 +1,138 @@
-# AgentBuy - Дараагийн алхмууд (MVP → Production)
+# Дараагийн алхамууд
 
-## ✅ Одоогоор хийгдсэн зүйлс:
-- ✅ Frontend ↔ Backend интеграци
-- ✅ MongoDB холболт
-- ✅ Domain тохиргоо (agentbuy.mn)
-- ✅ CORS тохиргоо
-- ✅ API endpoints бүгд холбогдсон
+## ✅ Хийгдсэн ажлууд
 
----
+1. ✅ Prisma schema үүсгэсэн
+2. ✅ Бүх controllers, services, routes Prisma руу шинэчлэсэн
+3. ✅ Database migration хийсэн
+4. ✅ Database connection тест хийсэн
 
-## 🚀 Production дээр deploy хийхээс өмнө:
+## 🔄 Одоо хийх ажлууд
 
-### 1. Security тохиргоо (ЗААВАЛ!)
+### 1. Server эхлүүлэх ба тест хийх
 
-**Backend `.env` файлд:**
-```env
-JWT_SECRET=<урт-санамсаргүй-тэмдэгт-мөр-50+тэмдэгт>
-```
-
-**JWT_SECRET үүсгэх:**
 ```bash
-node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
+cd backend
+npm run dev
 ```
 
-### 2. Cloudinary тохиргоо (Зураг хадгалах)
+Дараа нь browser эсвэл Postman ашиглан API endpoints-ийг тест хийх:
 
-**Backend `.env` файлд:**
+#### Auth Endpoints
+- `POST /api/auth/register` - Бүртгэл үүсгэх
+- `POST /api/auth/login` - Нэвтрэх
+- `GET /api/auth/me` - Одоогийн хэрэглэгч
+
+#### User Endpoints
+- `GET /api/user/profile` - Профайл авах
+- `GET /api/user/cargos` - Карго жагсаалт
+- `POST /api/user/cards/request` - Карт худалдан авах хүсэлт
+
+#### Order Endpoints
+- `POST /api/orders/draft` - Ноорог захиалга үүсгэх
+- `POST /api/orders/:id/publish` - Захиалга нийтлэх
+- `GET /api/orders` - Захиалгын жагсаалт
+
+### 2. Алдаа засах (хэрэв байвал)
+
+Хэрэв server эхлэхэд алдаа гарвал:
+- Console дээрх алдааны мэдээллийг шалгах
+- Prisma query logs шалгах
+- Database connection string зөв эсэхийг шалгах
+
+### 3. Production Deployment бэлтгэх
+
+#### Environment Variables
+Production server дээр `.env` файлд:
 ```env
-CLOUDINARY_CLOUD_NAME=your-cloud-name
-CLOUDINARY_API_KEY=your-api-key
-CLOUDINARY_API_SECRET=your-api-secret
-CLOUDINARY_UPLOAD_PRESET=your-preset  # optional
-CLOUDINARY_FOLDER=agentbuy
+DATABASE_URL="postgresql://postgres.onqtnnyrzqlvvfzwhyhq:Amgalan09091109@aws-1-ap-south-1.pooler.supabase.com:5432/postgres?schema=public&pgbouncer=true&connection_limit=1"
+JWT_SECRET="your-secret-key"
+NODE_ENV=production
+PORT=5000
+CLIENT_URL=https://agentbuy.mn,https://www.agentbuy.mn
 ```
 
-**Яагаад хэрэгтэй вэ?**
-- Одоогоор зураг base64 string байдлаар MongoDB-д хадгалагдаж байна
-- Cloudinary тохируулбал зураг Cloudinary-д upload хийгдээд URL-ийг хадгална
-- Database хэмжээ багасна, хурд сайжирна
-
-### 3. Environment Variables Production дээр
-
-**Backend:**
-- `NODE_ENV=production`
-- `PORT` (hosting provider-ийн порт)
-- `CLIENT_URL=https://agentbuy.mn,https://www.agentbuy.mn`
-
-**Frontend (Vercel/Netlify):**
-- `NEXT_PUBLIC_API_URL=https://api.agentbuy.mn` (эсвэл backend URL)
-- `NEXT_PUBLIC_SOCKET_URL=https://api.agentbuy.mn`
-
----
-
-## 📋 Production Deployment Checklist
-
-### Backend:
-- [ ] `JWT_SECRET` аюулгүй утгаар солих
-- [ ] `NODE_ENV=production` тохируулах
-- [ ] Cloudinary тохиргоо хийх (зураг upload хийх бол)
-- [ ] MongoDB Atlas Network Access тохируулах (0.0.0.0/0 эсвэл серверийн IP)
-- [ ] SSL/HTTPS суух
-- [ ] PM2 эсвэл process manager ашиглах
-- [ ] Error logging тохируулах
-
-### Frontend:
-- [ ] Environment variables тохируулах
-- [ ] Build тест хийх: `npm run build`
-- [ ] Vercel/Netlify дээр deploy хийх
-- [ ] Domain тохируулах (agentbuy.mn)
-
-### Testing:
-- [ ] Login/Register тест
-- [ ] Order create тест
-- [ ] Image upload тест
-- [ ] Socket.io real-time тест
-- [ ] Mobile responsive тест
-
----
-
-## 🔄 Database Migration (Хэрэв хэрэгтэй бол)
-
-Одоогоор MongoDB дээр base64 string байдлаар зураг хадгалагдаж байгаа бол, Cloudinary-д шилжүүлэх script:
-
-**Migration script үүсгэх:**
-```javascript
-// migrate-images.js
-// Энэ script нь MongoDB дээрх base64 зурагнуудыг Cloudinary-д upload хийж, URL-аар солино
+#### Migration Deploy
+```bash
+npm run prisma:migrate:deploy
 ```
 
-**Анхаар:** Энэ нь сонголт. Шинэ захиалганууд Cloudinary ашиглана (тохируулсан бол).
+#### Prisma Client Generate
+```bash
+npm run prisma:generate
+```
+
+### 4. Mongoose Dependency устгах (Optional)
+
+Хэрэв бүх зүйл зөв ажиллаж байвал Mongoose-ийг устгах боломжтой:
+
+```bash
+cd backend
+npm uninstall mongoose
+```
+
+**Анхаар:** Эхлээд бүх endpoints-ийг тест хийж, бүх зүйл зөв ажиллаж байгаа эсэхийг баталгаажуулаад дараа нь устгах нь зүйтэй.
+
+## 🧪 Testing Checklist
+
+- [ ] Server эхлэхэд алдаа гарахгүй
+- [ ] Database connection амжилттай
+- [ ] Auth endpoints ажиллаж байна
+- [ ] User endpoints ажиллаж байна
+- [ ] Order endpoints ажиллаж байна
+- [ ] Agent endpoints ажиллаж байна
+- [ ] Admin endpoints ажиллаж байна
+- [ ] Socket.io ажиллаж байна (хэрэв ашиглаж байвал)
+
+## 📝 Хэрэв алдаа гарвал
+
+### Connection Error
+```bash
+# Connection string шалгах
+cat backend/.env | grep DATABASE_URL
+
+# Prisma validate
+cd backend
+npm run prisma:validate
+
+# Prisma format
+npm run prisma:format
+```
+
+### Migration Error
+```bash
+# Migration status шалгах
+cd backend
+npx prisma migrate status
+
+# Migration reset (development only!)
+npx prisma migrate reset
+```
+
+### Query Error
+- Prisma Studio ашиглан database-ийг харах:
+  ```bash
+  npm run prisma:studio
+  ```
+- Browser дээр http://localhost:5555 нээх
+
+## 🚀 Production Checklist
+
+- [ ] Environment variables тохируулсан
+- [ ] Database migration хийсэн
+- [ ] Prisma Client үүсгэсэн
+- [ ] Server ажиллаж байна
+- [ ] API endpoints тест хийсэн
+- [ ] Socket.io ажиллаж байна (хэрэв ашиглаж байвал)
+- [ ] Error logging тохируулсан
+- [ ] Monitoring тохируулсан
+
+## 📚 Холбоосууд
+
+- [Prisma Documentation](https://www.prisma.io/docs)
+- [Supabase Documentation](https://supabase.com/docs)
+- [Prisma Studio](https://www.prisma.io/studio)
 
 ---
 
-## 📊 Monitoring & Analytics
-
-Production дээр нэмэх зүйлс:
-- [ ] Error tracking (Sentry гэх мэт)
-- [ ] Analytics (Google Analytics эсвэл өөр)
-- [ ] Server monitoring (Uptime monitoring)
-- [ ] Database backup strategy
-
----
-
-## 🐛 Bug Fixes & Improvements
-
-Одоогоор шалгах зүйлс:
-- [ ] Image upload ажиллаж байгаа эсэх
-- [ ] Socket.io real-time updates ажиллаж байгаа эсэх
-- [ ] Mobile responsive зөв харагдаж байгаа эсэх
-- [ ] Error handling зөв ажиллаж байгаа эсэх
-
----
-
-## 🎯 MVP → Production алхмууд:
-
-1. **Security тохиргоо** (JWT_SECRET) - ЗААВАЛ!
-2. **Cloudinary тохиргоо** - Зураг хадгалах
-3. **Production environment variables** тохируулах
-4. **Deploy хийх** (Backend + Frontend)
-5. **Testing хийх**
-6. **Monitoring тохируулах**
-
----
-
-## 💡 Зөвлөмж:
-
-**Одоо хийх:**
-1. JWT_SECRET өөрчлөх (security)
-2. Cloudinary тохиргоо хийх (зураг хадгалах)
-3. Production deploy хийх
-4. Testing хийх
-
-**Дараа нь:**
-- Database migration (хэрэв хэрэгтэй бол)
-- Monitoring тохируулах
-- Performance optimization
-- Additional features
-
+**Одоо server эхлүүлээд тест хийх цаг боллоо! 🚀**

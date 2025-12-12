@@ -1,0 +1,484 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User Model
+model User {
+  id                  String    @id @default(uuid())
+  phone               String    @unique
+  email               String?
+  passwordHash        String
+  fullName            String
+  avatarUrl           String?
+  secretQuestion      String
+  secretAnswerHash    String
+  roles               String[]  @default(["user"])
+  defaultCargoId      String?
+  cardBalance         Int       @default(5)
+  cardProgress        Int       @default(0)
+  completedOrdersCount Int      @default(0)
+  isActive            Boolean   @default(true)
+  lastLoginAt         DateTime?
+  resetToken          String?
+  resetTokenExpiry    DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  // Relations
+  defaultCargo        Cargo?            @relation(fields: [defaultCargoId], references: [id])
+  orders              Order[]
+  agentOrders         Order[]            @relation("AgentOrders")
+  agentProfile        AgentProfile?
+  cardRequests        CardRequest[]
+  cardTransactions    CardTransaction[]
+  chatMessages        ChatMessage[]
+  feedbacksFrom       Feedback[]         @relation("FeedbackFrom")
+  feedbacksTo         Feedback[]         @relation("FeedbackTo")
+  orderComments       OrderComment[]
+  lockedOrderLocks    OrderLock[]        @relation("LockedByAgent")
+  confirmedCardRequests CardRequest[]    @relation("ConfirmedBy")
+
+  @@index([phone])
+  @@index([email])
+  @@map("users")
+}
+
+// Cargo Model
+model Cargo {
+  id              String   @id @default(uuid())
+  name            String   @unique
+  description     String?
+  siteUrl         String?
+  logoUrl         String?
+  contactPhone    String?
+  isActive        Boolean  @default(true)
+  supportedCities String[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  users           User[]
+  orders          Order[]
+
+  @@map("cargos")
+}
+
+// Order Model
+model Order {
+  id              String   @id @default(uuid())
+  userId          String
+  agentId         String?
+  cargoId         String?
+  customName      String?
+  status          String   @default("DRAFT")
+  isPackage       Boolean  @default(false)
+  userNote        String?
+  agentNote       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  user            User     @relation(fields: [userId], references: [id])
+  agent           User?    @relation("AgentOrders", fields: [agentId], references: [id])
+  cargo           Cargo?   @relation(fields: [cargoId], references: [id])
+  items           OrderItem[]
+  lock            OrderLock?
+  pricing         OrderPricing?
+  payment         OrderPayment?
+  tracking        OrderTracking?
+  report          OrderReport?
+  comments        OrderComment[]
+  ratings         OrderRating[]
+  payments        Payment[]
+  chatMessages    ChatMessage[]
+  feedbacks       Feedback[]
+
+  @@index([userId, status])
+  @@index([agentId, status])
+  @@index([status, createdAt(sort: Desc)])
+  @@index([createdAt(sort: Desc)])
+  @@map("orders")
+}
+
+// OrderItem (embedded in Order)
+model OrderItem {
+  id            String  @id @default(uuid())
+  orderId       String
+  title         String
+  imageUrl      String?
+  images        String[]
+  sourceUrl     String?
+  quantity      Int     @default(1)
+  userNotes     String?
+  agentPrice    Float?
+  agentCurrency String  @default("CNY")
+  agentTotal    Float?
+  packageIndex  Int?
+  trackingCode  String?
+
+  order         Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+// OrderLock (embedded in Order)
+model OrderLock {
+  id              String   @id @default(uuid())
+  orderId         String   @unique
+  lockedByAgentId String?
+  lockedAt        DateTime?
+  expiresAt       DateTime?
+  extensionCount  Int      @default(0)
+
+  order           Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  lockedByAgent   User?    @relation("LockedByAgent", fields: [lockedByAgentId], references: [id])
+
+  @@index([expiresAt])
+  @@map("order_locks")
+}
+
+// OrderPricing (embedded in Order)
+model OrderPricing {
+  id                  String  @id @default(uuid())
+  orderId             String  @unique
+  productTotalCny     Float?
+  domesticShippingCny Float?
+  serviceFeeCny       Float?
+  otherFeesCny        Float?
+  grandTotalCny       Float?
+  exchangeRate        Float?
+  grandTotalMnt        Float?
+
+  order               Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("order_pricings")
+}
+
+// OrderPayment (embedded in Order)
+model OrderPayment {
+  id            String   @id @default(uuid())
+  orderId      String   @unique
+  status       String?
+  invoiceId    String?
+  paidAt       DateTime?
+  amountMnt    Float?
+  method       String?
+  providerTxnId String?
+  deadline     DateTime?
+
+  order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("order_payments")
+}
+
+// OrderTracking (embedded in Order)
+model OrderTracking {
+  id            String   @id @default(uuid())
+  orderId      String   @unique
+  code         String?
+  carrierName  String?
+  lastStatus   String?
+  lastUpdatedAt DateTime?
+
+  order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("order_trackings")
+}
+
+// OrderReport (embedded in Order)
+model OrderReport {
+  id            String   @id @default(uuid())
+  orderId      String   @unique
+  paymentLink   String?
+  agentComment  String?
+  submittedAt   DateTime?
+
+  order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  items        OrderReportItem[]
+  pricing      OrderReportPricing?
+
+  @@map("order_reports")
+}
+
+// OrderReportItem (embedded in OrderReport)
+model OrderReportItem {
+  id            String  @id @default(uuid())
+  reportId      String
+  title         String?
+  imageUrl      String?
+  sourceUrl     String?
+  quantity      Int?
+  agentPrice    Float?
+  agentCurrency String  @default("CNY")
+  agentTotal    Float?
+  note          String?
+  images        String[]
+  trackingCode  String?
+
+  report        OrderReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@map("order_report_items")
+}
+
+// OrderReportPricing (embedded in OrderReport)
+model OrderReportPricing {
+  id                  String  @id @default(uuid())
+  reportId            String  @unique
+  productTotalCny     Float?
+  domesticShippingCny Float?
+  serviceFeeCny       Float?
+  otherFeesCny        Float?
+  grandTotalCny       Float?
+  exchangeRate        Float?
+  grandTotalMnt        Float?
+
+  report              OrderReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@map("order_report_pricings")
+}
+
+// OrderComment (embedded in Order)
+model OrderComment {
+  id          String   @id @default(uuid())
+  orderId     String
+  senderId    String
+  senderRole  String
+  message     String   @default("")
+  attachments String[]
+  createdAt   DateTime @default(now())
+
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  sender      User     @relation(fields: [senderId], references: [id])
+
+  @@index([orderId, createdAt])
+  @@map("order_comments")
+}
+
+// OrderRating (embedded in Order - separate for user and agent)
+model OrderRating {
+  id        String   @id @default(uuid())
+  orderId   String
+  score     Int?
+  comment   String?
+  ratedBy   String   // "user" or "agent"
+
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([orderId, ratedBy])
+  @@map("order_ratings")
+}
+
+// Request Model
+model Request {
+  id              String   @id @default(uuid())
+  type            String   // "single" | "batch"
+  urgency         String   @default("normal")
+  status          String   @default("new")
+  claimedBy       String?
+  claimedAt       DateTime?
+  researchUntil   DateTime?
+  rating          Int?
+  paymentConfirmed Boolean @default(false)
+  paymentAt       DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  items           RequestItem[]
+  report          RequestReport?
+
+  @@index([status, createdAt])
+  @@map("requests")
+}
+
+// RequestItem (embedded in Request)
+model RequestItem {
+  id        String   @id @default(uuid())
+  requestId String
+  name      String?
+  mark      String?
+  quantity  Int?
+  app       String?
+  note      String?
+  link      String?
+  images    String[]
+
+  request   Request  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@map("request_items")
+}
+
+// RequestReport (embedded in Request)
+model RequestReport {
+  id          String    @id @default(uuid())
+  requestId   String    @unique
+  priceCny    Float?
+  note        String?
+  link        String?
+  paymentLink String?
+  image       String?
+  submittedAt DateTime?
+
+  request     Request   @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@map("request_reports")
+}
+
+// AgentProfile Model
+model AgentProfile {
+  id                String   @id @default(uuid())
+  userId            String   @unique
+  verificationStatus String  @default("pending")
+  rating            Float    @default(0)
+  reviewCount       Int      @default(0)
+  totalEarnedMnt    Float    @default(0)
+  tags              String[]
+  languages         String[]
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("agent_profiles")
+}
+
+// CardRequest Model
+model CardRequest {
+  id                String   @id @default(uuid())
+  userId            String
+  quantity          Int
+  pricePerCard      Int      @default(2000)
+  totalAmount       Int
+  status            String   @default("pending")
+  transactionNumber String?
+  paymentProof      String?
+  rejectedReason    String?
+  confirmedAt       DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  user              User     @relation(fields: [userId], references: [id])
+  confirmedBy       User?    @relation("ConfirmedBy", fields: [confirmedByUserId], references: [id])
+  confirmedByUserId String?
+  paymentInfo       CardRequestPaymentInfo?
+
+  @@index([userId, status])
+  @@index([status, createdAt(sort: Desc)])
+  @@map("card_requests")
+}
+
+// CardRequestPaymentInfo (embedded in CardRequest)
+model CardRequestPaymentInfo {
+  id            String  @id @default(uuid())
+  cardRequestId String  @unique
+  bankName      String?
+  bankAccount   String?
+  bankOwner     String?
+
+  cardRequest   CardRequest @relation(fields: [cardRequestId], references: [id], onDelete: Cascade)
+
+  @@map("card_request_payment_infos")
+}
+
+// CardTransaction Model
+model CardTransaction {
+  id            String   @id @default(uuid())
+  userId        String
+  orderId       String?
+  type          String
+  cardChange    Int
+  balanceAfter  Int
+  meta          Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user          User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@map("card_transactions")
+}
+
+// ChatMessage Model
+model ChatMessage {
+  id          String   @id @default(uuid())
+  orderId     String
+  fromUserId  String
+  role        String
+  message     String
+  attachments String[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  fromUser    User     @relation(fields: [fromUserId], references: [id])
+
+  @@index([orderId, createdAt])
+  @@map("chat_messages")
+}
+
+// Feedback Model
+model Feedback {
+  id        String   @id @default(uuid())
+  orderId   String
+  fromUserId String
+  toUserId  String
+  roleFrom  String
+  roleTo    String
+  rating    Int
+  comment   String?
+  tags      String[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  fromUser  User     @relation("FeedbackFrom", fields: [fromUserId], references: [id])
+  toUser    User     @relation("FeedbackTo", fields: [toUserId], references: [id])
+
+  @@index([orderId])
+  @@index([toUserId])
+  @@map("feedbacks")
+}
+
+// Payment Model
+model Payment {
+  id            String   @id @default(uuid())
+  orderId       String
+  userId        String
+  amountMnt     Float
+  status        String   @default("pending")
+  method        String?
+  invoiceId     String?
+  providerTxnId String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  order         Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([userId])
+  @@map("payments")
+}
+
+// Settings Model
+model Settings {
+  id          String   @id @default(uuid())
+  key         String   @unique @default("default")
+  cnyRate     Float    @default(0)
+  bankName    String?
+  bankAccount String?
+  bankOwner   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("settings")
+}

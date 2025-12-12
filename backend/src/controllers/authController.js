@@ -1,8 +1,7 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
-const User = require("../models/userModel");
-const CardTransaction = require("../models/cardTransactionModel");
+const { prisma } = require("../config/db");
 const { ROLES } = require("../constants/roles");
 const { safeUser } = require("./utils");
 const { applyCardChange } = require("../services/cardService");
@@ -35,7 +34,7 @@ async function register(req, res) {
       return res.status(400).json({ message: "Буруу нууц асуулт сонгосон байна" });
     }
 
-    const exists = await User.findOne({ phone });
+    const exists = await prisma.user.findUnique({ where: { phone } });
     if (exists) {
       return res.status(400).json({ message: "Энэ утсаар бүртгэлтэй байна" });
     }
@@ -44,32 +43,37 @@ async function register(req, res) {
     const secretAnswerHash = await bcrypt.hash(secretAnswer.toLowerCase().trim(), 10);
     const roles = [role].filter((r) => [ROLES.USER, ROLES.AGENT].includes(r));
     
-    const user = await User.create({
-      phone,
-      email,
-      passwordHash,
-      fullName,
-      secretQuestion,
-      secretAnswerHash,
-      roles: roles.length ? roles : [ROLES.USER],
-      cardBalance: 5,
-      cardProgress: 0,
+    const user = await prisma.user.create({
+      data: {
+        phone,
+        email,
+        passwordHash,
+        fullName,
+        secretQuestion,
+        secretAnswerHash,
+        roles: roles.length ? roles : [ROLES.USER],
+        cardBalance: 5,
+        cardProgress: 0,
+      },
     });
 
-    await CardTransaction.create({
-      userId: user._id,
-      type: "init",
-      cardChange: 5,
-      balanceAfter: 5,
-      meta: { source: "signup" },
+    await prisma.cardTransaction.create({
+      data: {
+        userId: user.id,
+        type: "init",
+        cardChange: 5,
+        balanceAfter: 5,
+        meta: { source: "signup" },
+      },
     });
 
     // агент болбол профайл үүсгэнэ
     if (roles.includes(ROLES.AGENT)) {
-      const AgentProfile = require("../models/agentProfileModel");
-      await AgentProfile.create({
-        userId: user._id,
-        verificationStatus: "pending",
+      await prisma.agentProfile.create({
+        data: {
+          userId: user.id,
+          verificationStatus: "pending",
+        },
       });
     }
 
@@ -90,7 +94,7 @@ async function login(req, res) {
     if (!phone || !password) {
       return res.status(400).json({ message: "Утас, нууц үг оруулна уу" });
     }
-    const user = await User.findOne({ phone });
+    const user = await prisma.user.findUnique({ where: { phone } });
     if (!user) {
       return res.status(400).json({ message: "Нэвтрэх мэдээлэл буруу" });
     }
@@ -99,8 +103,10 @@ async function login(req, res) {
       return res.status(400).json({ message: "Нэвтрэх мэдээлэл буруу" });
     }
     const firstLogin = !user.lastLoginAt;
-    user.lastLoginAt = new Date();
-    await user.save();
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    });
 
     if (firstLogin) {
       await applyCardChange(user, 3, "bonus_card", null, { reason: "first_login_bonus" });
@@ -141,7 +147,7 @@ async function getSecretQuestion(req, res) {
     if (!phone) {
       return res.status(400).json({ message: "Утасны дугаар шаардлагатай" });
     }
-    const user = await User.findOne({ phone });
+    const user = await prisma.user.findUnique({ where: { phone } });
     if (!user) {
       return res.status(404).json({ message: "Бүртгэл олдсонгүй" });
     }
@@ -160,7 +166,7 @@ async function verifySecretAnswer(req, res) {
       return res.status(400).json({ message: "Утас болон хариулт заавал" });
     }
 
-    const user = await User.findOne({ phone });
+    const user = await prisma.user.findUnique({ where: { phone } });
     if (!user) {
       return res.status(404).json({ message: "Бүртгэл олдсонгүй" });
     }
@@ -172,9 +178,13 @@ async function verifySecretAnswer(req, res) {
 
     // Reset token үүсгэх
     const resetToken = crypto.randomBytes(32).toString("hex");
-    user.resetToken = resetToken;
-    user.resetTokenExpiry = new Date(Date.now() + RESET_TOKEN_EXPIRY);
-    await user.save();
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        resetToken,
+        resetTokenExpiry: new Date(Date.now() + RESET_TOKEN_EXPIRY),
+      },
+    });
 
     res.json({ 
       message: "Баталгаажлаа", 
@@ -196,7 +206,7 @@ async function resetPassword(req, res) {
       return res.status(400).json({ message: "Утас, шинэ нууц үг, resetToken заавал" });
     }
 
-    const user = await User.findOne({ phone });
+    const user = await prisma.user.findUnique({ where: { phone } });
     if (!user) {
       return res.status(404).json({ message: "Бүртгэл олдсонгүй" });
     }
@@ -210,10 +220,14 @@ async function resetPassword(req, res) {
       return res.status(400).json({ message: "Token-ийн хугацаа дууссан байна. Дахин оролдоно уу." });
     }
 
-    user.passwordHash = await bcrypt.hash(newPassword, 10);
-    user.resetToken = undefined;
-    user.resetTokenExpiry = undefined;
-    await user.save();
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash: await bcrypt.hash(newPassword, 10),
+        resetToken: null,
+        resetTokenExpiry: null,
+      },
+    });
     
     res.json({ message: "Нууц үг шинэчлэгдлээ. Дахин нэвтэрнэ үү." });
   } catch (err) {
@@ -225,7 +239,7 @@ async function resetPassword(req, res) {
 function signToken(user, tokenAge = DEFAULT_TOKEN_AGE) {
   return jwt.sign(
     {
-      sub: user._id.toString(),
+      sub: (user.id || user._id).toString(),
       roles: user.roles,
     },
     process.env.JWT_SECRET,
