@@ -3,8 +3,9 @@ services:
     name: agentbuy-backend
     env: node
     plan: free # эсвэл starter, standard (таны plan-аас хамаарна)
-    buildCommand: cd backend && npm install && npx prisma generate && npx prisma migrate deploy
-    startCommand: cd backend && npm start
+    rootDir: backend
+    buildCommand: npm install && npx prisma generate && npx prisma migrate deploy
+    startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
